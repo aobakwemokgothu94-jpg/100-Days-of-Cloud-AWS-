@@ -1,1 +1,49 @@
+#!/bin/bash
+
+# ==============================================================================
+# NAUTILUS DEVOPS TASK REPORT & AUTOMATION SCRIPT
+# ==============================================================================
+# TASK: Attach IAM Policy to IAM User (AWS Migration Sub-task)
+# DATE: Fri Oct 02 17:45:33 UTC 2026
+# TARGET REGION: us-east-1
+# ==============================================================================
+# CONTEXT & ENVIRONMENT DETAILS:
+# - Console Sign-in URL: https://amazon.com
+# - Active Session User: kk_labs_user_786687
+# - Target IAM User:     iamuser_kareem (Pre-existing)
+# - Target IAM Policy:   iampolicy_kareem (Pre-existing)
+# ==============================================================================
+
+echo "----------------------------------------------------------------------"
+echo "STEP 1: Fetching the Amazon Resource Name (ARN) for iampolicy_kareem..."
+echo "----------------------------------------------------------------------"
+
+POLICY_ARN=$(aws iam list-policies \
+  --scope Local \
+  --query "Policies[?PolicyName=='iampolicy_kareem'].Arn" \
+  --output text)
+
+echo "Resulting Policy ARN found: $POLICY_ARN"
+echo ""
+
+echo "----------------------------------------------------------------------"
+echo "STEP 2: Executing policy attachment to user 'iamuser_kareem'..."
+echo "----------------------------------------------------------------------"
+
+aws iam attach-user-policy \
+  --user-name iamuser_kareem \
+  --policy-arn "$POLICY_ARN"
+
+echo "Attachment command executed."
+echo ""
+
+echo "----------------------------------------------------------------------"
+echo "STEP 3: Verifying final policy status for 'iamuser_kareem'..."
+echo "----------------------------------------------------------------------"
+
+aws iam list-attached-user-policies --user-name iamuser_kareem
+
+echo "======================================================================"
+echo "TASK COMPLETED SUCCESSFULLY"
+echo "======================================================================"
 
