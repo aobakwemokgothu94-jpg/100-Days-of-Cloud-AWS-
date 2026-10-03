@@ -1,1 +1,63 @@
+## Day 100: AWS IAM Role Creation and Policy Attachment
 
+### Task Description
+Configure AWS Identity and Access Management (IAM) infrastructure for the Nautilus DevOps team by creating an IAM role for EC2 instances and attaching a specified IAM policy.
+
+### Requirements
+- **Role Name:** `iamrole_mariyam`
+- **Trusted Entity Type:** AWS Service (`ec2.amazonaws.com`)
+- **Attached Policy:** `iampolicy_mariyam`
+- **AWS Region:** `us-east-1`
+
+### Execution Steps
+
+1. **Create Trust Policy Document:**
+   Define the trust relationship policy allowing EC2 service to assume the role.
+   ```bash
+   cat << 'EOF' > trust-policy.json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Effect": "Allow",
+         "Principal": {
+           "Service": "ec2.amazonaws.com"
+         },
+         "Action": "sts:AssumeRole"
+       }
+     ]
+   }
+   EOF
+
+aws iam create-role \
+  --role-name iamrole_mariyam \
+  --assume-role-policy-document file://trust-policy.json
+
+aws iam attach-role-policy \
+  --role-name iamrole_mariyam \
+  --policy-arn arn:aws:iam::536088174569:policy/iampolicy_mariyam
+
+aws iam list-attached-role-policies --role-name iamrole_mariyam
+
+Output:
+{
+    "Role": {
+        "Path": "/",
+        "RoleName": "iamrole_mariyam",
+        "RoleId": "AROAXZUKYL7U2FZTFKU7Q",
+        "Arn": "arn:aws:iam::536088174569:role/iamrole_mariyam",
+        "CreateDate": "2026-10-03T20:01:10Z",
+        "AssumeRolePolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {
+                        "Service": "ec2.amazonaws.com"
+                    },
+                    "Action": "sts:AssumeRole"
+                }
+            ]
+        }
+    }
+}
