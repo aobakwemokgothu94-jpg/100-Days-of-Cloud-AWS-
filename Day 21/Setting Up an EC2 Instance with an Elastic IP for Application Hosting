@@ -1,1 +1,47 @@
+# AWS EC2 & Elastic IP Setup (`nautilus-ec2`)
 
+This project provisions a Linux EC2 instance (`nautilus-ec2`) and attaches a dedicated static Elastic IP (`nautilus-eip`) in the `us-east-1` region using the AWS CLI.
+
+---
+
+## Technical Specifications
+
+| Parameter | Value |
+| :--- | :--- |
+| **Region** | `us-east-1` |
+| **Instance Name** | `nautilus-ec2` |
+| **Instance Type** | `t2.micro` |
+| **OS / AMI** | Ubuntu 22.04 LTS (`x86_64`) |
+| **Elastic IP Name** | `nautilus-eip` |
+
+---
+
+## One-Line Automated Deployment
+
+Execute this script in your terminal to create the resources and assign the Elastic IP in a single run:
+
+```bash
+# 1. Fetch VPC, Subnet, and Ubuntu AMI IDs
+VPC_ID=$(aws ec2 describe-vpcs --filters "Name=isDefault,Values=true" --query "Vpcs[0].VpcId" --output text)
+SUBNET_ID=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" --query "Subnets[0].SubnetId" --output text)
+AMI_ID=$(aws ec2 describe-images --owners 099720109477 --filters "Name=name,Values=ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*" "Name=state,Values=available" --query "reverse(sort_by(Images, &CreationDate))[0].ImageId" --output text)
+
+# 2. Provision EC2 Instance
+INSTANCE_ID=$(aws ec2 run-instances \
+  --image-id $AMI_ID \
+  --instance-type t2.micro \
+  --subnet-id $SUBNET_ID \
+  --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=nautilus-ec2}]' \
+  --query "Instances[0].InstanceId" \
+  --output text)
+
+# 3. Allocate Elastic IP
+ALLOCATION_ID=$(aws ec2 allocate-address \
+  --domain vpc \
+  --tag-specifications 'ResourceType=elastic-ip,Tags=[{Key=Name,Value=nautilus-eip}]' \
+  --query "AllocationId" \
+  --output text)
+
+# 4. Wait for instance startup & Associate Elastic IP
+aws ec2 wait instance-running --instance-ids $INSTANCE_ID
+aws ec2 associate-address --instance-id $INSTANCE_ID --allocation-id $ALLOCATION_ID
