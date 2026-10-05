@@ -1,1 +1,84 @@
+# AWS EC2 Instance Provisioning & Passwordless Root SSH Access
+
+## Project Overview
+This project demonstrates automating the deployment of an Amazon EC2 instance (`t2.micro`) named `datacenter-ec2` in the `us-east-1` region using the AWS CLI. It configures secure, passwordless SSH access directly for the `root` user from a designated client host (`aws-client`).
+
+---
+
+## Technical Architecture & Workflow
+1. **SSH Key Generation**: Generated a 2048-bit RSA key pair (`/root/.ssh/id_rsa`) on the landing host (`aws-client`).
+2. **AWS Key Pair Import**: Imported the public key (`id_rsa.pub`) into AWS EC2 Key Pairs as `datacenter-ec2-key`.
+3. **AMI & Instance Provisioning**: Dynamically retrieved the latest Amazon Linux 2 AMI ID and launched a `t2.micro` EC2 instance tagged `Name=datacenter-ec2`.
+4. **Security Group Ingress Configuration**: Authorized inbound SSH traffic (TCP port 22) on the instance's primary security group.
+5. **Root Access Setup**: Transferred public key credentials to `/root/.ssh/authorized_keys` on the target EC2 instance.
+6. **Validation**: Verified passwordless SSH access as `root`.
+
+---
+
+## Key Commands Executed
+
+### 1. Key Pair Generation
+```bash
+sudo mkdir -p /root/.ssh && sudo chmod 700 /root/.ssh
+sudo ssh-keygen -t rsa -b 2048 -f /root/.ssh/id_rsa -N ""
+
+2. AWS Key Import & AMI Retrieval
+
+
+# Import Public Key to AWS
+aws ec2 import-key-pair \
+  --key-name "datacenter-ec2-key" \
+  --public-key-material fileb:///root/.ssh/id_rsa.pub \
+  --region us-east-1
+
+# Query Latest Amazon Linux 2 AMI ID
+AMI_ID=$(aws ec2 describe-images \
+  --owners amazon \
+  --filters "Name=name,Values=amzn2-ami-hvm-2.0.*-x86_64-gp2" "Name=state,Values=available" \
+  --query "reverse(sort_by(Images, &CreationDate))[0].ImageId" \
+  --output text)
+
+3. Instance Deployment & Inbound Security Configuration
+
+# Launch EC2 Instance
+INSTANCE_ID=$(aws ec2 run-instances \
+  --image-id "$AMI_ID" \
+  --instance-type t2.micro \
+  --key-name "datacenter-ec2-key" \
+  --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=datacenter-ec2}]' \
+  --query 'Instances[0].InstanceId' \
+  --output text)
+
+# Fetch Instance Public IP & Security Group ID
+PUBLIC_IP=$(aws ec2 describe-instances --instance-ids "$INSTANCE_ID" --query "Reservations[0].Instances[0].PublicIpAddress" --output text)
+SG_ID=$(aws ec2 describe-instances --instance-ids "$INSTANCE_ID" --query "Reservations[0].Instances[0].SecurityGroups[0].GroupId" --output text)
+
+# Authorize Inbound SSH Traffic
+aws ec2 authorize-security-group-ingress \
+  --group-id "$SG_ID" \
+  --protocol tcp \
+  --port 22 \
+  --cidr 0.0.0.0/0
+
+4. Root User Authorization & SSH Verification
+
+# Provision Root authorized_keys File
+sudo ssh -o StrictHostKeyChecking=no -i /root/.ssh/id_rsa ec2-user@$PUBLIC_IP \
+  "sudo cp /home/ec2-user/.ssh/authorized_keys /root/.ssh/authorized_keys && sudo chown root:root /root/.ssh/authorized_keys"
+
+# Test Passwordless Connection as Root
+sudo ssh -i /root/.ssh/id_rsa root@$PUBLIC_IP "hostname"
+
+Deployment Results
+Instance Name: datacenter-ec2
+
+Instance ID: i-0d0e647ebe94a5a5f
+
+Region: us-east-1
+
+Public IP: 34.201.215.215
+
+Internal Hostname: ip-172-31-33-28.ec2.internal
+
+Status: Verified Passwordless SSH Access Successful
 
