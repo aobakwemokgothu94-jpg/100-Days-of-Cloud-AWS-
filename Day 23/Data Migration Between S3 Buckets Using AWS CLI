@@ -1,1 +1,109 @@
+# AWS S3 Data Migration & Synchronization
 
+An automated AWS S3 bucket provisioning and data sync project completed as part of the Nautilus DevOps tasks on KodeKloud.
+
+## 📌 Project Overview
+
+The objective of this project was to perform a secure, zero-data-loss migration from an existing Amazon S3 bucket (`datacenter-s3-384482213`) to a newly provisioned private S3 bucket (`datacenter-sync-384482213`) in the `us-east-1` region using the AWS CLI.
+
+## 🛠️ Infrastructure & Tools
+
+* **Cloud Provider:** Amazon Web Services (AWS)
+* **Storage Service:** Amazon Simple Storage Service (S3)
+* **Command-Line Tool:** AWS CLI (`aws s3api`, `aws s3`)
+* **Region:** `us-east-1`
+
+## 🚀 Implementation Steps
+
+### 1. Provision New Private S3 Bucket
+Created a dedicated, private S3 destination bucket in the `us-east-1` region:
+
+```bash
+aws s3api create-bucket --bucket datacenter-sync-384482213 --region us-east-1
+
+2. Verify Bucket Availability
+Confirmed active creation and permissions using the head-bucket API call:
+
+aws s3api head-bucket --bucket datacenter-sync-384482213
+
+3. Data Migration & Sync
+Synchronized all objects, directory structures, and metadata from the source bucket to the destination bucket:
+
+aws s3 sync s3://datacenter-s3-384482213 s3://datacenter-sync-384482213
+
+4. Data Consistency Verification
+Extracted detailed recursive lists with summaries for both buckets and compared output using diff to guarantee zero missing files or corrupted byte counts:
+
+# Summarize source bucket contents
+aws s3 ls s3://datacenter-s3-384482213 --recursive --summarize > /tmp/source.txt
+
+# Summarize destination bucket contents
+aws s3 ls s3://datacenter-sync-384482213 --recursive --summarize > /tmp/dest.txt
+
+# Validate identical object count and file sizes
+diff /tmp/source.txt /tmp/dest.txt
+
+✅ Results & Validation
+Total Objects Transferred: 3,782 objects
+
+Total Volume Migrated: ~110.07 MB (110,075,734 bytes)
+
+Integrity Status: PASSED (Zero diff discrepancies between source and target buckets)
+
+***
+
+### 👁️ Rendered Preview
+
+---
+
+# AWS S3 Data Migration & Synchronization
+
+An automated AWS S3 bucket provisioning and data sync project completed as part of the Nautilus DevOps tasks on KodeKloud.
+
+## 📌 Project Overview
+
+The objective of this project was to perform a secure, zero-data-loss migration from an existing Amazon S3 bucket (`datacenter-s3-384482213`) to a newly provisioned private S3 bucket (`datacenter-sync-384482213`) in the `us-east-1` region using the AWS CLI.
+
+## 🛠️ Infrastructure & Tools
+
+* **Cloud Provider:** Amazon Web Services (AWS)
+* **Storage Service:** Amazon Simple Storage Service (S3)
+* **Command-Line Tool:** AWS CLI (`aws s3api`, `aws s3`)
+* **Region:** `us-east-1`
+
+## 🚀 Implementation Steps
+
+### 1. Provision New Private S3 Bucket
+Created a dedicated, private S3 destination bucket in the `us-east-1` region:
+
+`aws s3api create-bucket --bucket datacenter-sync-384482213 --region us-east-1`
+
+### 2. Verify Bucket Availability
+Confirmed active creation and permissions using the `head-bucket` API call:
+
+`aws s3api head-bucket --bucket datacenter-sync-384482213`
+
+### 3. Data Migration & Sync
+Synchronized all objects, directory structures, and metadata from the source bucket to the destination bucket:
+
+`aws s3 sync s3://datacenter-s3-384482213 s3://datacenter-sync-384482213`
+
+### 4. Data Consistency Verification
+Extracted detailed recursive lists with summaries for both buckets and compared output using `diff` to guarantee zero missing files or corrupted byte counts:
+
+```bash
+# Summarize source bucket contents
+aws s3 ls s3://datacenter-s3-384482213 --recursive --summarize > /tmp/source.txt
+
+# Summarize destination bucket contents
+aws s3 ls s3://datacenter-sync-384482213 --recursive --summarize > /tmp/dest.txt
+
+# Validate identical object count and file sizes
+diff /tmp/source.txt /tmp/dest.txt
+
+✅ Results & Validation
+Total Objects Transferred: 3,782 objects
+
+Total Volume Migrated: ~110.07 MB (110,075,734 bytes)
+
+Integrity Status: PASSED (Zero diff discrepancies between source and target buckets)
