@@ -1,1 +1,81 @@
+# AWS EC2 Nginx Web Server Setup
 
+This repository documents the provisioning and deployment of an Nginx web server on AWS EC2 as part of the Nautilus project initial infrastructure setup.
+
+## Task Overview
+
+The goal was to set up a public-facing EC2 instance running Nginx on Ubuntu in the `us-east-1` region using the AWS CLI.
+
+### Specifications Required:
+* **Instance Name:** `devops-ec2`
+* **AMI:** Ubuntu 22.04 LTS (Jammy Jellyfish)
+* **Region:** `us-east-1`
+* **Security Group:** Allows inbound HTTP traffic on **Port 80** from `0.0.0.0/0`.
+* **User Data:** Automatically installs, enables, and starts Nginx upon launch.
+
+---
+
+## Deployment Steps
+
+### 1. Set Default AWS Region
+```bash
+aws configure set default.region us-east-1
+2. Identify Default VPC & Create Security Group
+Bash
+# Retrieve the default VPC ID
+VPC_ID=$(aws ec2 describe-vpcs --filters "Name=isDefault,Values=true" --query "Vpcs[0].VpcId" --output text)
+
+# Create Security Group for HTTP traffic
+SG_ID=$(aws ec2 create-security-group \
+  --group-name web-server-sg \
+  --description "Allow HTTP traffic" \
+  --vpc-id $VPC_ID \
+  --query 'GroupId' --output text)
+
+# Authorize inbound HTTP traffic on port 80
+aws ec2 authorize-security-group-ingress \
+  --group-id $SG_ID \
+  --protocol tcp \
+  --port 80 \
+  --cidr 0.0.0.0/0
+3. Create User Data Script
+Bash
+cat << 'EOF' > userdata.sh
+#!/bin/bash
+apt-get update -y
+apt-get install -y nginx
+systemctl start nginx
+systemctl enable nginx
+EOF
+4. Fetch Ubuntu AMI & Launch EC2 Instance
+Bash
+# Get latest Ubuntu 22.04 LTS AMI ID
+AMI_ID=$(aws ec2 describe-images \
+  --owners 099720109477 \
+  --filters "Name=name,Values=ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*" "Name=state,Values=available" \
+  --query 'reverse(sort_by(Images, &CreationDate))[0].ImageId' --output text)
+
+# Launch EC2 instance
+aws ec2 run-instances \
+  --image-id $AMI_ID \
+  --instance-type t2.micro \
+  --security-group-ids $SG_ID \
+  --user-data file://userdata.sh \
+  --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=devops-ec2}]'
+Verification
+Check Instance Status and Public IP:
+
+Bash
+aws ec2 describe-instances \
+  --filters "Name=tag:Name,Values=devops-ec2" \
+  --query 'Reservations[0].Instances[0].[InstanceId, State.Name, PublicIpAddress]' \
+  --output text
+Verify Nginx Service over HTTP:
+
+Bash
+curl -I http://<PUBLIC_IP>
+Expected Output:
+
+HTTP
+HTTP/1.1 200 OK
+Server: nginx/1.18.0 (Ubuntu)
