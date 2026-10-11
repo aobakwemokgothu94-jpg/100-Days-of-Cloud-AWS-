@@ -1,1 +1,76 @@
+Nautilus DevOps: AWS ECR Containerized Application Deployment
+This document records the steps, implementation details, and verification results for creating an Amazon Elastic Container Registry (ECR) repository and pushing a containerized application image using the aws-client host.
 
+1. Overview & Objectives
+Task: Create a private ECR repository named devops-ecr in the us-east-1 region.
+
+Build Source: Build a Docker image from the Dockerfile located at /root/pyapp on the aws-client host.
+
+Image Tag: Tag the built image as latest and push it to the newly created ECR repository.
+
+2. Implementation Steps
+Step 2.1: Configure AWS CLI Region & Verify Identity
+Log in to the aws-client host, verify credentials, and set the default region to us-east-1:
+
+Bash
+aws configure set region us-east-1
+aws sts get-caller-identity
+Step 2.2: Create the Private ECR Repository
+Create the private ECR repository with scan-on-push enabled:
+
+Bash
+aws ecr create-repository --repository-name devops-ecr --image-scanning-configuration scanOnPush=true --region us-east-1
+Step 2.3: Authenticate Docker with ECR
+Retrieve the temporary authorization token and authenticate the local Docker client:
+
+Bash
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 796938193522.dkr.ecr.us-east-1.amazonaws.com
+Step 2.4: Build, Tag, and Push the Docker Image
+Navigate to the application directory, build the image, tag it with the ECR repository URI, and push it:
+
+Bash
+cd /root/pyapp
+docker build -t devops-ecr:latest .
+docker tag devops-ecr:latest 796938193522.dkr.ecr.us-east-1.amazonaws.com/devops-ecr:latest
+docker push 796938193522.dkr.ecr.us-east-1.amazonaws.com/devops-ecr:latest
+3. Results & Execution Logs
+Repository Creation Output
+JSON
+{
+    "repository": {
+        "repositoryArn": "arn:aws:ecr:us-east-1:796938193522:repository/devops-ecr",
+        "registryId": "796938193522",
+        "repositoryName": "devops-ecr",
+        "repositoryUri": "796938193522.dkr.ecr.us-east-1.amazonaws.com/devops-ecr",
+        "createdAt": 1791696159.603,
+        "imageTagMutability": "MUTABLE",
+        "imageScanningConfiguration": {
+            "scanOnPush": true
+        },
+        "encryptionConfiguration": {
+            "encryptionType": "AES256"
+        }
+    }
+}
+Docker Login & Build Output
+Plaintext
+Login Succeeded
+[+] Building 187.5s (9/9) FINISHED   docker:default
+ => [internal] load build definition from Dockerfile       0.1s
+ => [internal] load metadata for docker.io/library/python  122.1s
+ => [1/4] FROM docker.io/library/python:3.8-slim          61.5s
+ => [2/4] COPY . /app                                     0.3s
+ => [3/4] WORKDIR /app                                    0.1s
+ => [4/4] RUN pip install -r requirements.txt             2.8s
+ => exporting to image                                    0.3s
+Docker Push Output
+Plaintext
+The push refers to repository [796938193522.dkr.ecr.us-east-1.amazonaws.com/devops-ecr]
+cd93c04c8185: Pushed 
+5f70bf18a086: Pushed 
+5bc6ef76f82e: Pushed 
+d2a2207b52a4: Pushed 
+5d2d143f3d7f: Pushed 
+c3772b569c3a: Pushed 
+8d853c8add5d: Pushed 
+latest: digest: sha256:99d945d71beea3f85e69ac4c4ea8afb96d8402344ed2c3c1ffda0ea834e37f0a size: 1783
