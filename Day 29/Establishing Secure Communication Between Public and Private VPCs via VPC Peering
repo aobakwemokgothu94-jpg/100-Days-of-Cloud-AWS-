@@ -1,1 +1,224 @@
 
+AWS VPC Peering Deployment Network Documentation
+
+This documentation provides an interactive operational log and engineering guide detailing the network configuration required to establish secure, bidirectional VPC Peering communications within us-east-1. It traces the complete implementation lifecycle, mapping out infrastructure discovery, routing resolution, security posture refinement, and connection validation across public and isolated private subnets.
+
+🛠️ Infrastructure Landscape Overview
+
+The underlying cloud environment maps across two decoupled Virtual Private Clouds configured with dedicated routing tables and instance security postures:
+  [ Default Public VPC ]                              [ Datacenter Private VPC ]
+    CIDR: 172.31.0.0/16                                  CIDR: 10.1.0.0/16
+             │                                                      │
+ ┌───────────┴───────────┐                              ┌───────────┴───────────┐
+ │ Main Route Table      │                              │ Main Route Table      │
+ │ 0.0.0.0/0 -> igw      │                              │                       │
+ │ 10.1.0.0/16 -> pcx───┼──────────► [pcx] ◄───────────┼──172.31.0.0/16 -> pcx │
+ └───────────┬───────────┘       VPC Peering Connection └───────────┬───────────┘
+             │                    pcx-0e32e7a7ee3d44440             │
+   [ datacenter-public-ec2 ]                              [ datacenter-private-ec2 ]
+     Public IP: 98.91.244.152                               Private IP: 10.1.1.131
+     Private IP: 172.31.42.219                              SG ID: sg-0e76b515f2504de1f
+
+💻 Step-by-Step Implementation Runbook
+
+
+Phase 1: Environment Variable Discovery
+
+Run the following discovery pipeline on the aws-client local terminal to programmatically capture target network IDs, runtime security groups, and IP metrics into environment profiles:
+bash
+# 1. Fetch Default Public VPC network metrics
+DEFAULT_VPC_ID=$(aws ec2 describe-vpcs --filters "Name=is-default,Values=true" --query "Vpcs[0].VpcId" --output text --region us-east-1)
+DEFAULT_VPC_CIDR=$(aws ec2 describe-vpcs --filters "Name=is-default,Values=true" --query "Vpcs[0].CidrBlock" --output text --region us-east-1)
+
+# 2. Fetch Isolated Private VPC network metrics
+PRIVATE_VPC_ID=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=datacenter-private-vpc" --query "Vpcs[0].VpcId" --output text --region us-east-1)
+PRIVATE_VPC_CIDR="10.1.0.0/16"
+
+# 3. Resolve Target Instances, IP endpoints, and Security Group references
+PUBLIC_INSTANCE_ID="i-0802eccd4fd2a569f"
+PUBLIC_IP=$(aws ec2 describe-instances --instance-ids $PUBLIC_INSTANCE_ID --query "Reservations[0].Instances[0].PublicIpAddress" --output text --region us-east-1)
+
+PRIVATE_INSTANCE_ID=$(aws ec2 describe-instances --filters "Name=vpc-id,Values=$PRIVATE_VPC_ID" "Name=instance-state-name,Values=running" --query "Reservations[0].Instances[0].InstanceId" --output text --region us-east-1)
+PRIVATE_IP=$(aws ec2 describe-instances --instance-ids $PRIVATE_INSTANCE_ID --query "Reservations[0].Instances[0].PrivateIpAddress" --output text --region us-east-1)
+PRIVATE_SG_ID=$(aws ec2 describe-instances --instance-ids $PRIVATE_INSTANCE_ID --query "Reservations[0].Instances[0].SecurityGroups[0].GroupId" --output text --region us-east-1)
+
+
+Phase 2: Interface Provisioning & Manual Acceptance
+
+Initiate and formally accept the inter-VPC connection link to move the interface from a provisioning status into an active state:
+bash
+# Accept the peering connection handshake
+aws ec2 accept-vpc-peering-connection \
+  --vpc-peering-connection-id pcx-0e32e7a7ee3d44440 \
+  --region us-east-1
+
+
+Command Execution Logs
+
+json
+{
+    "VpcPeeringConnection": {
+        "AccepterVpcInfo": {
+            "CidrBlock": "10.1.0.0/16",
+            "CidrBlockSet": [{"CidrBlock": "10.1.0.0/16"}],
+            "OwnerId": "481362523914",
+            "PeeringOptions": {
+                "AllowDnsResolutionFromRemoteVpc": false,
+                "AllowEgressFromLocalClassicLinkToRemoteVpc": false,
+                "AllowEgressFromLocalVpcToRemoteClassicLink": false
+            },
+            "VpcId": "vpc-054a99e1a41966232",
+            "Region": "us-east-1"
+        },
+        "RequesterVpcInfo": {
+            "CidrBlock": "172.31.0.0/16",
+            "CidrBlockSet": [{"CidrBlock": "172.31.0.0/16"}],
+            "OwnerId": "481362523914",
+            "PeeringOptions": {
+                "AllowDnsResolutionFromRemoteVpc": false,
+                "AllowEgressFromLocalClassicLinkToRemoteVpc": false,
+                "AllowEgressFromLocalVpcToRemoteClassicLink": false
+            },
+            "VpcId": "vpc-085ea0b72a3520fef",
+            "Region": "us-east-1"
+        },
+        "Status": {
+            "Code": "active",
+            "Message": "Active"
+        },
+        "Tags": [],
+        "VpcPeeringConnectionId": "pcx-0e32e7a7ee3d44440"
+    }
+}
+
+
+Phase 3: Route Table Target Injection
+
+Query target VPC main route tables dynamically to resolve structural dependencies, injecting reciprocal routing targets over the newly active pcx link:
+bash
+# 1. Fetch main Route Table reference for Public VPC
+DEFAULT_RT_ID=$(aws ec2 describe-route-tables \
+  --filters "Name=vpc-id,Values=vpc-085ea0b72a3520fef" "Name=association.main,Values=true" \
+  --query "RouteTables[0].RouteTableId" --output text --region us-east-1)
+
+# 2. Inject Outbound Route block to target Private Subnet
+aws ec2 create-route \
+  --route-table-id $DEFAULT_RT_ID \
+  --destination-cidr-block 10.1.0.0/16 \
+  --vpc-peering-connection-id pcx-0e32e7a7ee3d44440 --region us-east-1
+
+# 3. Fetch main Route Table reference for Private VPC
+PRIVATE_RT_ID=$(aws ec2 describe-route-tables \
+  --filters "Name=vpc-id,Values=vpc-054a99e1a41966232" "Name=association.main,Values=true" \
+  --query "RouteTables[0].RouteTableId" --output text --region us-east-1)
+
+# 4. Inject Return Route block to target Public Subnet
+aws ec2 create-route \
+  --route-table-id $PRIVATE_RT_ID \
+  --destination-cidr-block 172.31.0.0/16 \
+  --vpc-peering-connection-id pcx-0e32e7a7ee3d44440 --region us-east-1
+
+
+Current Routing State Verification Logs
+
+bash
+# Public VPC Routes Checklist
+aws ec2 describe-route-tables --route-table-ids $DEFAULT_RT_ID --query "RouteTables[0].Routes" --region us-east-1
+[
+    {
+        "DestinationCidrBlock": "172.31.0.0/16",
+        "GatewayId": "local",
+        "Origin": "CreateRouteTable",
+        "State": "active"
+    },
+    {
+        "DestinationCidrBlock": "10.1.0.0/16",
+        "Origin": "CreateRoute",
+        "State": "active",
+        "VpcPeeringConnectionId": "pcx-0e32e7a7ee3d44440"
+    },
+    {
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "GatewayId": "igw-04a1e61358186650b",
+        "Origin": "CreateRoute",
+        "State": "active"
+    }
+]
+
+# Private VPC Routes Checklist
+aws ec2 describe-route-tables --route-table-ids $PRIVATE_RT_ID --query "RouteTables[0].Routes" --region us-east-1
+[
+    {
+        "DestinationCidrBlock": "172.31.0.0/16",
+        "Origin": "CreateRoute",
+        "State": "active",
+        "VpcPeeringConnectionId": "pcx-0e32e7a7ee3d44440"
+    },
+    {
+        "DestinationCidrBlock": "10.1.0.0/16",
+        "GatewayId": "local",
+        "Origin": "CreateRouteTable",
+        "State": "active"
+    }
+]
+
+
+Phase 4: Inbound Access & Firewall Policy Upgrades
+
+Update Security Group entries for both target environments to clear edge connectivity paths, explicitly whitelisting SSH management boundaries and ICMP transit capabilities:
+bash
+# 1. Authorize local administrative public terminal IP against Public Jump Security Group
+MY_IP=$(curl -s https://amazonaws.com)
+PUBLIC_SG_ID=$(aws ec2 describe-instances --instance-ids $PUBLIC_INSTANCE_ID --query "Reservations[0].Instances[0].SecurityGroups[0].GroupId" --output text --region us-east-1)
+
+aws ec2 authorize-security-group-ingress \
+  --group-id $PUBLIC_SG_ID \
+  --protocol tcp --port 22 --cidr "${MY_IP}/32" --region us-east-1
+
+# 2. Authorize Inbound SSH traffic from Public Subnet to Private Instance
+aws ec2 authorize-security-group-ingress \
+  --group-id $PRIVATE_SG_ID \
+  --protocol tcp --port 22 --cidr 172.31.0.0/16 --region us-east-1
+
+# 3. Authorize Inbound ICMP Echo Requests from Public Subnet across the Peering link
+aws ec2 authorize-security-group-ingress \
+  --group-id $PRIVATE_SG_ID \
+  --protocol icmp --port -1 --cidr 172.31.0.0/16 --region us-east-1
+Use code with caution.
+
+Phase 5: Verification and Connectivity Testing
+
+To execute verification, inject administrative keys using EC2 Instance Connect API boundaries to open a terminal gateway session, bypassing SSM target faults:
+bash
+# 1. Flash public key authorization into metadata runtimes
+aws ec2-instance-connect send-ssh-public-key --instance-id $PUBLIC_INSTANCE_ID --instance-os-user ec2-user --ssh-public-key file:///root/.ssh/id_rsa.pub --region us-east-1
+aws ec2-instance-connect send-ssh-public-key --instance-id $PRIVATE_INSTANCE_ID --instance-os-user ec2-user --ssh-public-key file:///root/.ssh/id_rsa.pub --region us-east-1
+
+# 2. Inject public identity permanently into target authorized_keys configuration profile
+cat /root/.ssh/id_rsa.pub | ssh -i /root/.ssh/id_rsa -o StrictHostKeyChecking=no ec2-user@98.91.244.152 "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys"
+
+# 3. Establish standard connection session to the Public Jump host
+ssh -i /root/.ssh/id_rsa ec2-user@98.91.244.152
+
+
+Final Execution Verification Logs
+
+bash
+[ec2-user@ip-172-31-42-219 ~]$ # Validate utility availability and test ICMP echo requests
+[ec2-user@ip-172-31-42-219 ~]$ sudo dnf install iputils -y
+Last metadata expiration check: 0:35:01 ago on Mon Oct 12 08:40:27 2026.
+Package iputils-20210202-2.amzn2023.0.4.x86_64 is already installed.
+Dependencies resolved.
+Nothing to do.
+Complete!
+
+[ec2-user@ip-172-31-42-219 ~]$ ping -c 4 10.1.1.131
+PING 10.1.1.131 (10.1.1.131) 56(84) bytes of data.
+64 bytes from 10.1.1.131: icmp_seq=1 ttl=127 time=1.90 ms
+64 bytes from 10.1.1.131: icmp_seq=2 ttl=127 time=1.50 ms
+64 bytes from 10.1.1.131: icmp_seq=3 ttl=127 time=1.94 ms
+64 bytes from 10.1.1.131: icmp_seq=4 ttl=127 time=1.33 ms
+
+--- 10.1.1.131 ping statistics ---
+4 packets transmitted, 4 received, 0% packet loss, time 3005ms
+rtt min/avg/max/mdev = 1.329/1.665/1.938/0.2
