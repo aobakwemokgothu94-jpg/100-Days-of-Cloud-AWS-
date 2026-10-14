@@ -1,1 +1,46 @@
+AWS RDS MySQL Instance Provisioning (devops-rds)
+Overview
+This README documents the steps followed to provision a private MySQL RDS instance named devops-rds using the AWS CLI for the Nautilus Development Team, fulfilling all criteria including versioning, storage configuration, and autoscaling thresholds in the us-east-1 region.
 
+Requirements Summary
+Instance Identifier: devops-rds
+
+Region: us-east-1
+
+Engine: MySQL (Version 8.4.x)
+
+Instance Class: db.t3.micro
+
+Storage Type: General Purpose SSD (gp2)
+
+Allocated Storage: 20 GiB
+
+Storage Autoscaling: Enabled with a Maximum storage threshold of 22 GiB
+
+Step-by-Step Implementation
+Step 1: Execute the RDS Creation Command via AWS CLI
+Ran the aws rds create-db-instance command in the aws-client terminal specifying all required parameters:
+
+Bash
+aws rds create-db-instance \
+    --region us-east-1 \
+    --db-instance-identifier devops-rds \
+    --db-instance-class db.t3.micro \
+    --engine mysql \
+    --engine-version 8.4 \
+    --master-username admin \
+    --master-user-password Password123! \
+    --allocated-storage 20 \
+    --storage-type gp2 \
+    --max-allocated-storage 22
+Step 2: Monitor Instance Provisioning Status
+Polled the instance status using aws rds describe-db-instances until the state transitioned through initialization phases (creating, configuring-enhanced-monitoring) and reached the available state:
+
+Bash
+aws rds describe-db-instances \
+    --region us-east-1 \
+    --db-instance-identifier devops-rds \
+    --query "DBInstances[0].DBInstanceStatus" \
+    --output text
+Step 3: Verification & Completion
+Once the status returned available, the setup was successfully finalized and validated for the KodeKloud lab requirements.
