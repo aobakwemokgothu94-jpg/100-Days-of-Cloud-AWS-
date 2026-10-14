@@ -1,1 +1,306 @@
+Here is a ready-to-copy `README.md` for your AWS NAT Instance task, including a project overview, architecture preview, implementation steps, verification output, and results. I've left out the file structure as requested in your earlier README task.
+
+AWS NAT Instance Setup for Private EC2 Internet Access
+
+# AWS NAT Instance Setup for Private EC2 Internet Access
+
+## Project Overview
+
+This project demonstrates how to provide internet access to an Amazon EC2 instance running in a private subnet using a **NAT Instance** instead of a NAT Gateway.
+
+The solution was implemented in AWS using the `us-east-1` region. A public subnet was created to host an Amazon Linux 2023 NAT instance, which forwards traffic from the private subnet to the internet.
+
+The configuration was verified by confirming that the private EC2 instance successfully uploaded `datacenter-test.txt` to the designated Amazon S3 bucket.
+
+## Objectives
+
+* Create a public subnet named `datacenter-pub-subnet`.
+
+* Launch an Amazon Linux 2023 EC2 instance named `datacenter-nat-instance`.
+
+* Configure a custom security group for the NAT instance.
+
+* Enable IP forwarding and configure NAT masquerading using `iptables`.
+
+* Disable source/destination checking on the NAT instance.
+
+* Configure the public and private route tables.
+
+* Verify internet access by checking the S3 test file.
+
+## AWS Resources
+
+| Resource               | Name / Identifier          |
+| ---------------------- | -------------------------- |
+| AWS Region             | `us-east-1`                |
+| VPC                    | `datacenter-priv-vpc`      |
+| VPC ID                 | `vpc-0a376ffe9344d622f`    |
+| Private EC2 Instance   | `datacenter-priv-ec2`      |
+| Private Instance ID    | `i-00505d0241d2134d5`      |
+| Private Subnet         | `subnet-0d48726447982ce8d` |
+| Private Subnet CIDR    | `10.1.1.0/24`              |
+| Public Subnet          | `datacenter-pub-subnet`    |
+| Public Subnet ID       | `subnet-0e594e19ebe435dcb` |
+| Public Subnet CIDR     | `10.1.2.0/24`              |
+| NAT Instance           | `datacenter-nat-instance`  |
+| NAT Instance ID        | `i-08879f0249189917b`      |
+| NAT Instance Public IP | `54.161.204.186`           |
+| NAT Security Group     | `sg-0e0b4b9bfc7e7407b`     |
+| Internet Gateway       | `igw-04bd7f0c585b922cc`    |
+| Public Route Table     | `rtb-0eaaebbcebd80c9b6`    |
+| S3 Bucket              | `datacenter-nat-560867437` |
+
+## Architecture Preview
+
+The private EC2 instance does not have a direct route to the internet. Instead, its outbound internet traffic passes through the NAT instance in the public subnet.
+
+```
+                  Internet
+                     |
+                     v
+             Internet Gateway
+                     |
+                     v
+          +----------------------+
+          |     Public Subnet    |
+          |    10.1.2.0/24       |
+          |                      |
+          |   NAT EC2 Instance   |
+          |  Amazon Linux 2023   |
+          |                      |
+          +----------------------+
+                     |
+            Private Route Table
+             0.0.0.0/0 -> NAT
+                     |
+                     v
+          +----------------------+
+          |    Private Subnet    |
+          |    10.1.1.0/24       |
+          |                      |
+          |   Private EC2        |
+          |   Cron Job           |
+          +----------------------+
+                     |
+                     v
+               Amazon S3
+       datacenter-nat-560867437
+                     |
+                     v
+          datacenter-test.txt
+```
+
+## Implementation Steps
+
+### 1. Configure AWS CLI
+
+The AWS CLI was configured using the credentials provided by the lab environment.
+
+The active identity was verified with:
+
+```
+aws sts get-caller-identity --region us-east-1
+```
+
+The AWS account identity was returned successfully.
+
+### 2. Create the Public Subnet
+
+A new public subnet was created inside the existing VPC.
+
+* **Name:** `datacenter-pub-subnet`
+
+* **CIDR:** `10.1.2.0/24`
+
+* **Availability Zone:** `us-east-1a`
+
+Auto-assignment of public IPv4 addresses was enabled for the subnet.
+
+### 3. Create and Attach an Internet Gateway
+
+An internet gateway was created and attached to the VPC.
+
+The public route table was configured with the following route:
+
+| Destination   | Target           |
+| ------------- | ---------------- |
+| `10.1.0.0/16` | Local VPC route  |
+| `0.0.0.0/0`   | Internet Gateway |
+
+The public subnet was associated with this route table.
+
+### 4. Create a Custom Security Group
+
+A custom security group named `datacenter-nat-sg` was created for the NAT instance.
+
+The inbound rule permits traffic from the private subnet CIDR, `10.1.1.0/24`.
+
+The default outbound rule permits outbound traffic. The security group allows the NAT instance to handle traffic originating from the private subnet.
+
+### 5. Launch the NAT Instance
+
+The NAT instance was launched with an Amazon Linux 2023 AMI.
+
+Configuration:
+
+* **Name:** `datacenter-nat-instance`
+
+* **Instance type:** `t3.micro`
+
+* **Subnet:** `datacenter-pub-subnet`
+
+* **Security group:** `datacenter-nat-sg`
+
+* **Public IPv4:** `54.161.204.186`
+
+Source/destination checking was disabled so that the instance could forward traffic on behalf of other instances.
+
+### 6. Install and Configure iptables
+
+Amazon Linux 2023 does not include the required `iptables` services by default. The NAT instance startup script installs and enables `iptables-services`.
+
+The configuration enables IPv4 forwarding:
+
+```
+echo 'net.ipv4.ip_forward = 1' > /etc/sysctl.d/99-nat.conf
+sysctl --system
+```
+
+Forwarding and connection tracking rules were configured:
+
+```
+iptables -F FORWARD
+iptables -t nat -F POSTROUTING
+
+iptables -P FORWARD ACCEPT
+
+iptables -A FORWARD \
+  -s 10.1.1.0/24 -j ACCEPT
+
+iptables -A FORWARD \
+  -d 10.1.1.0/24 \
+  -m conntrack \
+  --ctstate RELATED,ESTABLISHED \
+  -j ACCEPT
+
+iptables -t nat -A POSTROUTING \
+  -s 10.1.1.0/24 \
+  -o ens5 \
+  -j MASQUERADE
+```
+
+The rules were saved so they could be restored by the service.
+
+### 7. Update the Private Route Table
+
+The private subnet's route table was updated with a default route targeting the NAT instance.
+
+| Destination   | Target                             |
+| ------------- | ---------------------------------- |
+| `10.1.0.0/16` | Local VPC route                    |
+| `0.0.0.0/0`   | NAT instance `i-08879f0249189917b` |
+
+This directs outbound internet traffic from the private subnet through the NAT instance.
+
+### 8. Verify the S3 Upload
+
+The private EC2 instance already had a cron job configured to upload a test file every minute.
+
+The S3 bucket was checked using:
+
+```
+aws s3 ls s3://datacenter-nat-560867437/ --region us-east-1
+```
+
+The following output confirmed success:
+
+```
+2026-10-13 14:46:36         21 datacenter-test.txt
+```
+
+The presence of `datacenter-test.txt` confirms that the private EC2 instance successfully reached Amazon S3 through the configured NAT instance.
+
+## Results
+
+The task was completed successfully.
+
+* Created the public subnet in the existing VPC.
+
+* Launched an Amazon Linux 2023 NAT instance.
+
+* Created and attached an internet gateway.
+
+* Configured a custom security group.
+
+* Enabled IP forwarding and NAT masquerading with `iptables`.
+
+* Disabled source/destination checking.
+
+* Configured the private subnet's default route through the NAT instance.
+
+* Verified the test file in the S3 bucket.
+
+## Key Learnings
+
+* A private EC2 instance can access the internet without a public IP by routing traffic through a NAT instance.
+
+* A NAT instance must have a public IP address and a route to an internet gateway.
+
+* Source/destination checking must be disabled on a NAT instance.
+
+* IP forwarding and masquerading are essential for translating and forwarding private-subnet traffic.
+
+* Security groups and route tables must be configured correctly for the traffic flow to work.
+
+* An S3 object upload provides practical evidence that outbound connectivity is working.
+
+## Conclusion
+
+This project demonstrates how to enable outbound internet access for private EC2 instances using a NAT instance. The networking configuration was completed and validated by successfully locating `datacenter-test.txt` in the target S3 bucket.
+
+Using a NAT instance can reduce costs in some environments compared with a NAT Gateway, but it requires more manual configuration and maintenance and does not provide the same managed availability and scalability.
+
+## README preview
+
+## AWS NAT Instance Setup
+
+README.md · Markdown preview
+
+Completed
+
+# AWS NAT Instance Setup for Private EC2 Internet Access
+
+AWS · EC2 · VPC · NAT · iptables · S3
+
+This project configures a NAT instance to provide outbound internet connectivity to an EC2 instance in a private subnet.
+
+### Architecture
+
+Internet
+
+Internet Gateway
+
+PUBLIC SUBNET · 10.1.2.0/24
+
+NAT EC2 Instance
+
+Amazon Linux 2023 · iptables
+
+PRIVATE SUBNET · 10.1.1.0/24
+
+Private EC2 Instance
+
+Cron job uploads test file
+
+Amazon S3
+
+datacenter-test.txt verified
+
+### Verification output
+
+2026-10-13 14:46:36 21 datacenter-test.txt
+
+The S3 upload was verified successfully.
+
+To use it: Copy the complete README above into your existing `README.md` file and save it. The architecture diagram uses Mermaid-free ASCII, so it will render in GitHub without additional configuration.
 
