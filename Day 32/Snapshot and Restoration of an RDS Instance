@@ -1,1 +1,67 @@
+AWS RDS Backup and Restore Automation
+A complete guide and automation record for taking an Amazon RDS instance snapshot and restoring it to a new instance for database infrastructure updates and validation.
 
+Architecture & Task Overview
+Source RDS Instance: datacenter-rds
+
+Snapshot Identifier: datacenter-snapshot
+
+Restored RDS Instance: datacenter-snapshot-restore
+
+Target Instance Class: db.t3.micro
+
+AWS Region: us-east-1
+
+Implementation Steps & Commands
+1. Verify Source Instance Status
+Ensure the source RDS instance is available before initiating backup tasks.
+
+Bash
+aws rds describe-db-instances \
+    --db-instance-identifier datacenter-rds \
+    --region us-east-1 \
+    --query "DBInstances[0].DBInstanceStatus"
+2. Create the Database Snapshot
+Capture a manual snapshot of the production-aligned instance.
+
+Bash
+aws rds create-db-snapshot \
+    --db-instance-identifier datacenter-rds \
+    --db-snapshot-identifier datacenter-snapshot \
+    --region us-east-1
+3. Wait for Snapshot Completion
+Monitor the snapshot creation process until it reaches the available state.
+
+Bash
+aws rds wait db-snapshot-available \
+    --db-snapshot-identifier datacenter-snapshot \
+    --region us-east-1
+4. Restore Snapshot to New Instance
+Provision a new RDS instance using the captured snapshot and assign the db.t3.micro instance class.
+
+Bash
+aws rds restore-db-instance-from-db-snapshot \
+    --db-instance-identifier datacenter-snapshot-restore \
+    --db-snapshot-identifier datacenter-snapshot \
+    --db-instance-class db.t3.micro \
+    --region us-east-1
+5. Verify Restored Instance Availability
+Confirm that the newly restored instance successfully transitions to the available state.
+
+Bash
+aws rds wait db-instance-available \
+    --db-instance-identifier datacenter-snapshot-restore \
+    --region us-east-1
+Execution Preview
+JSON
+{
+    "DBInstance": {
+        "DBInstanceIdentifier": "datacenter-snapshot-restore",
+        "DBInstanceClass": "db.t3.micro",
+        "Engine": "mysql",
+        "DBInstanceStatus": "available",
+        "MasterUsername": "datacenter_admin",
+        "AllocatedStorage": 5,
+        "EngineVersion": "8.4.5"
+    }
+}
