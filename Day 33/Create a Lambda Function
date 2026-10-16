@@ -1,1 +1,81 @@
+AWS Lambda Deployment: Custom Greeting Function
+This repository contains the infrastructure and deployment files for a serverless AWS Lambda function created for the Nautilus DevOps team. The function returns a custom greeting with a 200 status code, demonstrating rapid deployment and scalability using AWS Lambda.
 
+Architecture & Resources
+Cloud Provider: AWS
+
+Region: us-east-1
+
+Service: AWS Lambda
+
+Function Name: devops-lambda
+
+Runtime: Python 3.11
+
+IAM Role: lambda_execution_role (with AWSLambdaBasicExecutionRole policy attached)
+
+Function Code (lambda_function.py)
+Python
+import json
+
+def lambda_handler(event, context):
+    return {
+        'statusCode': 200,
+        'body': 'Welcome to KKE AWS Labs!'
+    }
+Setup & Deployment Guide
+1. Create the IAM Trust Policy
+Save the following trust policy configuration as trust-policy.json:
+
+JSON
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "lambda.amazonaws.com"
+      },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}
+2. Create the IAM Role and Attach Permissions
+Run the following AWS CLI commands to set up the execution role:
+
+Bash
+# Create the IAM role
+aws iam create-role --role-name lambda_execution_role --assume-role-policy-document file://trust-policy.json
+
+# Attach the basic execution policy for logs and monitoring
+aws iam attach-role-policy --role-name lambda_execution_role --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+3. Create the Deployment Package
+Package the Python function into a ZIP archive:
+
+Bash
+zip function.zip lambda_function.py
+4. Deploy the Lambda Function
+Create the Lambda function in the us-east-1 region using the created role and deployment package:
+
+Bash
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+
+aws lambda create-function \
+  --function-name devops-lambda \
+  --runtime python3.11 \
+  --role arn:aws:iam::${ACCOUNT_ID}:role/lambda_execution_role \
+  --handler lambda_function.lambda_handler \
+  --zip-file fileb://function.zip \
+  --region us-east-1
+Verification
+Test the deployed function using the AWS CLI:
+
+Bash
+aws lambda invoke \
+  --function-name devops-lambda \
+  --region us-east-1 \
+  response.json && cat response.json
+Expected Output:
+
+JSON
+{"statusCode": 200, "body": "Welcome to KKE AWS Labs!"}
