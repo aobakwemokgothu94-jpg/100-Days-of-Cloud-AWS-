@@ -1,1 +1,177 @@
 
+# AWS Lambda Custom Greeting Function
+
+## Overview
+
+This project demonstrates the deployment of a serverless function using AWS Lambda and the AWS CLI. The function returns a custom greeting message with a status code of `200`.
+
+The task was completed for the Nautilus DevOps team as part of an AWS serverless computing lab.
+
+## Objectives
+
+- Create a Python Lambda handler.
+- Package the Python source file into a ZIP archive.
+- Deploy an AWS Lambda function using the AWS CLI.
+- Associate the function with an existing IAM execution role.
+- Invoke the function and verify its response.
+
+## Technologies Used
+
+- **AWS Lambda** — Serverless function execution.
+- **Python 3.12** — Lambda runtime.
+- **AWS CLI** — Function deployment and invocation.
+- **IAM** — Execution role and permissions.
+- **ZIP** — Deployment package format.
+
+## Lambda Configuration
+
+| Setting | Value |
+|---|---|
+| Function name | `datacenter-lambda-cli` |
+| Runtime | `python3.12` |
+| Handler | `lambda_function.lambda_handler` |
+| IAM role | `lambda_execution_role` |
+| Deployment package | `function.zip` |
+| AWS Region | `us-east-1` |
+| Memory | 128 MB |
+| Timeout | 10 seconds |
+
+## Project Files
+
+```text
+.
+├── lambda_function.py
+└── function.zip
+```
+
+- `lambda_function.py` contains the Lambda handler.
+- `function.zip` contains the Python source file at the root of the archive.
+
+## Implementation
+
+### 1. Create the Python function
+
+Create `lambda_function.py`:
+
+```python
+def lambda_handler(event, context):
+    return {
+        'statusCode': 200,
+        'body': 'Welcome to KKE AWS Labs!'
+    }
+```
+
+The handler accepts the Lambda event and context arguments and returns a dictionary containing the status code and greeting.
+
+### 2. Package the function
+
+Create the ZIP deployment package:
+
+```bash
+zip -j function.zip lambda_function.py
+```
+
+The `-j` option places the Python file at the root of the ZIP archive, which allows Lambda to locate the handler correctly.
+
+### 3. Deploy the Lambda function
+
+Retrieve the IAM role ARN:
+
+```bash
+aws iam get-role \
+  --role-name lambda_execution_role \
+  --query 'Role.Arn' \
+  --output text
+```
+
+Create the function:
+
+```bash
+aws lambda create-function \
+  --function-name datacenter-lambda-cli \
+  --runtime python3.12 \
+  --role "$(aws iam get-role \
+    --role-name lambda_execution_role \
+    --query 'Role.Arn' \
+    --output text)" \
+  --handler lambda_function.lambda_handler \
+  --zip-file fileb://function.zip \
+  --timeout 10 \
+  --memory-size 128
+```
+
+### 4. Verify deployment
+
+Check the function configuration:
+
+```bash
+aws lambda get-function \
+  --function-name datacenter-lambda-cli \
+  --query 'Configuration.{Name:FunctionName,Runtime:Runtime,Handler:Handler,Role:Role,State:State}' \
+  --output table
+```
+
+The function was verified to be in the `Active` state with the expected runtime, handler, and execution role.
+
+### 5. Invoke the function
+
+Invoke the deployed Lambda function:
+
+```bash
+aws lambda invoke \
+  --function-name datacenter-lambda-cli \
+  --payload '{}' \
+  response.json
+```
+
+Display the response:
+
+```bash
+cat response.json
+```
+
+## Expected Output
+
+The invocation returns a successful execution status:
+
+```json
+{
+  "StatusCode": 200,
+  "ExecutedVersion": "$LATEST"
+}
+```
+
+The contents of `response.json` are:
+
+```json
+{
+  "statusCode": 200,
+  "body": "Welcome to KKE AWS Labs!"
+}
+```
+
+## Results
+
+The task was successfully completed and verified.
+
+- Lambda function created and activated.
+- Python runtime configured correctly.
+- Existing IAM execution role attached.
+- ZIP deployment package uploaded.
+- Function invocation completed successfully.
+- Greeting message and status code matched the requirements.
+
+## Key Learnings
+
+- Creating and deploying AWS Lambda functions using the AWS CLI.
+- Understanding Lambda handlers and invocation payloads.
+- Packaging Python code for serverless deployment.
+- Associating an execution role with a Lambda function.
+- Verifying deployed resources and function output.
+
+## Conclusion
+
+This lab demonstrates a basic serverless deployment workflow using AWS Lambda. The function was deployed as `datacenter-lambda-cli` and successfully returned the required greeting:
+
+**Welcome to KKE AWS Labs!**
+
