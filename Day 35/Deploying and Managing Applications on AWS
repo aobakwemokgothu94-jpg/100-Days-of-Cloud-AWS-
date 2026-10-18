@@ -1,1 +1,43 @@
+Task README & Preview: MySQL RDS and EC2 Application Setup
+Overview
+This task successfully provisions a private MySQL RDS instance in AWS (us-east-1), configures network security groups for database access and web traffic, establishes passwordless SSH access to the xfusion-ec2 instance, and deploys a configured PHP connection script.
 
+Architecture & Implementation Steps
+1. Networking & Security Group Configuration
+VPC Subnets: Discovered the default VPC (vpc-0f1d6a88ffd6ef17b) and generated an RDS DB subnet group (xfusion-rds-subnets) spanning all available subnets across the availability zones in us-east-1.
+
+Security Groups:
+
+EC2 Security Group (sg-0586eb60dff16a8dd): Configured ingress rules to open HTTP traffic on port 80 (0.0.0.0/0).
+
+RDS Security Group (sg-0f71435f2e6024a50): Configured ingress rules to allow MySQL traffic on port 3306 originating exclusively from the EC2 security group.
+
+2. RDS Instance Provisioning
+Identifier: xfusion-rds
+
+Engine & Version: MySQL 8.4.5
+
+Instance Class: db.t3.micro
+
+Storage: 5 GiB, gp2 storage type
+
+Database Name: xfusion_db
+
+Master User: xfusion_admin
+
+Accessibility: Private (--no-publicly-accessible)
+
+3. Passwordless SSH & File Deployment
+Generated an RSA SSH key pair (/root/.ssh/id_rsa) on the aws-client host.
+
+Pushed the public key using AWS EC2 Instance Connect and permanently appended it to /root/.ssh/authorized_keys on xfusion-ec2 (54.205.189.158).
+
+Updated the template file /root/index.php using a Python automation snippet to inject the RDS endpoint, database name, username, and master password.
+
+Securely copied the finalized index.php file to /var/www/html/index.php on the EC2 instance via SCP.
+
+Preview & Verification
+When navigating to the public IP of the EC2 instance ([http://54.205.189.158/](http://54.205.189.158/)), the PHP script successfully queries the private MySQL RDS instance and displays:
+
+HTML
+Connected successfully
