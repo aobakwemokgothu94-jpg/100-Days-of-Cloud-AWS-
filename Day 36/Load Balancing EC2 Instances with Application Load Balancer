@@ -1,1 +1,188 @@
+# AWS Application Load Balancer with EC2 and Nginx
+
+## 📌 Project Overview
+
+This project demonstrates how to deploy a web server on an Amazon EC2 instance and make it accessible through an internet-facing Application Load Balancer (ALB).
+
+The solution uses AWS EC2, a target group, security groups, and an HTTP listener to distribute incoming web traffic to an Nginx web server.
+
+## 🎯 Objectives
+
+- Launch an EC2 instance running Ubuntu.
+- Install and run Nginx as the web server.
+- Configure security groups to allow HTTP traffic on port 80.
+- Create an EC2 target group and register the instance.
+- Configure an internet-facing Application Load Balancer.
+- Verify website accessibility through the ALB DNS endpoint.
+
+## 🏗️ Architecture Preview
+
+```text
+                 Internet / Web Browser
+                          |
+                          | HTTP :80
+                          v
+              Application Load Balancer
+                     devops-alb
+                          |
+                          v
+                  Target Group
+                    devops-tg
+                          |
+                          | HTTP :80
+                          v
+                    EC2 Instance
+                    devops-ec2
+                    Ubuntu Linux
+                          |
+                          v
+                     Nginx Server
+                    Website Content
+```
+
+### Traffic Flow
+
+1. A user sends an HTTP request to the ALB DNS address.
+2. The Application Load Balancer receives traffic on port 80.
+3. The ALB forwards the request to the registered EC2 target.
+4. Nginx serves the website content.
+5. The ALB returns the HTTP response to the user.
+
+## 🛠️ AWS Resources
+
+| Resource | Configuration |
+|---|---|
+| AWS Region | `us-east-1` |
+| EC2 Instance | `devops-ec2` |
+| Instance ID | `i-02bd2553fe50c66b1` |
+| Operating System | Ubuntu Linux |
+| Web Server | Nginx |
+| EC2 Security Group | `devops-sg` |
+| Target Group | `devops-tg` |
+| Load Balancer | `devops-alb` |
+| Protocol | HTTP |
+| Port | `80` |
+| Target Health | Healthy |
+
+## ⚙️ Implementation Steps
+
+### 1. Configure the AWS Region
+
+```bash
+export AWS_DEFAULT_REGION=us-east-1
+```
+
+### 2. Verify the EC2 Instance
+
+```bash
+aws ec2 describe-instances \
+  --filters "Name=tag:Name,Values=devops-ec2" \
+  --query 'Reservations[].Instances[].{ID:InstanceId,State:State.Name}' \
+  --output table
+```
+
+The instance was confirmed to be running.
+
+### 3. Verify the Target Group
+
+Retrieve the target group ARN:
+
+```bash
+TG=$(aws elbv2 describe-target-groups \
+  --names devops-tg \
+  --query 'TargetGroups[0].TargetGroupArn' \
+  --output text)
+```
+
+Check target health:
+
+```bash
+aws elbv2 describe-target-health \
+  --target-group-arn "$TG" \
+  --output table
+```
+
+The EC2 instance was successfully registered and reported a `healthy` status.
+
+### 4. Retrieve the Load Balancer DNS Name
+
+```bash
+aws elbv2 describe-load-balancers \
+  --names devops-alb \
+  --query 'LoadBalancers[0].DNSName' \
+  --output text
+```
+
+**Website URL:**
+
+http://devops-alb-2118533242.us-east-1.elb.amazonaws.com
+
+### 5. Test the Website
+
+```bash
+curl -I --max-time 10 \
+  http://devops-alb-2118533242.us-east-1.elb.amazonaws.com
+```
+
+## ✅ Verification Results
+
+### EC2 Instance
+
+```text
+ID                    State
+i-02bd2553fe50c66b1    running
+```
+
+### Target Group Health
+
+```text
+Target ID: i-02bd2553fe50c66b1
+Port:      80
+State:     healthy
+```
+
+### HTTP Response
+
+```http
+HTTP/1.1 200 OK
+Content-Type: text/html
+Server: nginx/1.24.0 (Ubuntu)
+```
+
+The HTTP test returned `200 OK`, confirming that the website was accessible through the Application Load Balancer.
+
+## 🔐 Security Configuration
+
+- The ALB accepts HTTP traffic on port 80.
+- The EC2 security group allows HTTP traffic from the ALB's security group.
+- The target group forwards requests to the EC2 instance on port 80.
+- Security group rules control communication between the internet-facing ALB and the backend web server.
+
+**Security note:** For production environments, HTTPS should be configured using an SSL/TLS certificate, and administrative access should be restricted.
+
+## 📊 Final Results
+
+| Validation | Result |
+|---|---|
+| EC2 instance running | PASS |
+| Target registered | PASS |
+| Target health check | PASS |
+| Nginx responding | PASS |
+| HTTP response `200 OK` | PASS |
+| Website accessible through ALB | PASS |
+
+## 📚 Key Learnings
+
+- Deploying and verifying EC2 instances using the AWS CLI.
+- Configuring security groups for controlled network access.
+- Registering EC2 instances with an Elastic Load Balancing target group.
+- Configuring an Application Load Balancer to forward HTTP traffic.
+- Verifying application health using AWS CLI and `curl`.
+- Understanding how load balancers separate public access from backend application infrastructure.
+
+## 🏁 Conclusion
+
+The AWS Application Load Balancer deployment was successfully configured and tested. The EC2 instance is running Nginx, the target group reports a healthy backend, and the website returns HTTP `200 OK` through the ALB DNS endpoint.
+
+This project demonstrates a foundational AWS architecture for exposing a web application through a managed load balancer.
 
