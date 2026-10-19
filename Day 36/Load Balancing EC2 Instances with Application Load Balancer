@@ -182,6 +182,53 @@ The HTTP test returned `200 OK`, confirming that the website was accessible thro
 
 ## 🏁 Conclusion
 
+
+LAB notes and scripting
+1. Architecture preview
+
+Browser → ALB → Target Group → EC2 → Nginx
+Internet / Browser
+
+HTTP port 80
+
+Application Load Balancer
+
+devops-alb
+
+Target Group: devops-tg
+Healthy
+
+EC2: devops-ec2
+
+Ubuntu + Nginx
+
+
+
+
+2. Terminal output preview
+
+Actual verification results from your task
+EC2 instance: running
+
+Target group: healthy
+
+Nginx HTTP response: 200 OK
+
+
+Verified server header
+
+HTTP/1.1 200 OK
+Content-Type: text/html
+Server: nginx/1.24.0 (Ubuntu)
+ Copy verification output
+
+
+3. Live website preview
+
+Your deployed endpoint:
+
+devops-alb-2118533242.us-east-1.elb.amazonaws.com
+  Open live website
 The AWS Application Load Balancer deployment was successfully configured and tested. The EC2 instance is running Nginx, the target group reports a healthy backend, and the website returns HTTP `200 OK` through the ALB DNS endpoint.
 
 This project demonstrates a foundational AWS architecture for exposing a web application through a managed load balancer.
