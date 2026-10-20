@@ -1,1 +1,157 @@
 
+AWS EC2 to S3 Secure Application Integration
+
+This project configures secure programmatic storage access for an application hosted on an Amazon EC2 instance (devops-ec2) to interact with a private Amazon S3 bucket (devops-s3-139373540961). Access is managed using IAM roles and policies to eliminate hardcoded credentials.
+
+Architectural Components
+
+• Compute: devops-ec2 (Ubuntu 22.04 LTS instance).
+• Storage: devops-s3-139373540961 (Private bucket with public access blocked).
+• Identity & Access: devops-role assuming an instance profile linked to a custom IAM privilege statement.
+
+Step-by-Step Implementation Guide
+
+
+1. SSH Key Management & Access Setup
+
+Generate an administrative RSA cryptographic key pair on the management host and inject the public signature onto the target instance to establish trust.
+bash
+# Generate the cryptographic keypair locally
+ssh-keygen -t rsa -b 2048 -f ~/.ssh/id_rsa -N ""
+
+# Inject the public signature cleanly via an automated SSM run command block
+export INSTANCE_ID=$(aws ec2 describe-instances --filters "Name=tag:Name,Values=devops-ec2" --query "Reservations[*].Instances[*].InstanceId" --output text --region us-east-1)
+
+cat << EOF > ssm-commands.json
+{
+  "commands": [
+    "mkdir -p /root/.ssh",
+    "echo '$(cat ~/.ssh/id_rsa.pub)' >> /root/.ssh/authorized_keys",
+    "chmod 700 /root/.ssh",
+    "chmod 600 /root/.ssh/authorized_keys"
+  ]
+}
+EOF
+
+aws ssm send-command \
+  --instance-ids "$INSTANCE_ID" \
+  --document-name "AWS-RunShellScript" \
+  --parameters file://ssm-commands.json \
+  --region us-east-1
+Use code with caution.
+
+2. Private S3 Bucket Deployment
+
+Provision the dedicated object storage bucket and apply strict configurations to block all public access paths.
+bash
+# Provision the bucket namespace
+aws s3api create-bucket \
+  --bucket devops-s3-139373540961 \
+  --region us-east-1
+
+# Apply strict public access control blocks
+aws s3api put-public-access-block \
+  --bucket devops-s3-139373540961 \
+  --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true \
+  --region us-east-1
+Use code with caution.
+
+3. Least-Privilege IAM Infrastructure
+
+Build the data policy parameters, create an execution role for EC2, and attach it to the instance workspace.
+bash
+# Generate the application data boundary policy
+cat << 'EOF' > s3-policy.json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:GetObject", "s3:ListBucket"],
+      "Resource": ["arn:aws:s3:::devops-s3-139373540961", "arn:aws:s3:::devops-s3-139373540961/*"]
+    }
+  ]
+}
+EOF
+
+# Generate the STS AssumeRole trust policy boundary
+cat << 'EOF' > trust-policy.json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": { "Service": "://amazonaws.com" },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}
+EOF
+
+# Deploy the configuration assets across the cluster management plane
+aws iam create-policy --policy-name devops-s3-policy --policy-document file://s3-policy.json
+aws iam create-role --role-name devops-role --assume-role-policy-document file://trust-policy.json
+aws iam attach-role-policy --role-name devops-role --policy-arn arn:aws:iam::139373540961:policy/devops-s3-policy
+
+# Link structural assets to the targeted instance configuration matrix
+aws iam create-instance-profile --instance-profile-name devops-instance-profile-group
+aws iam add-role-to-instance-profile --instance-profile-name devops-instance-profile-group --role-name devops-role
+
+# Map the active structural profile payload to your running EC2 machine instance
+aws ec2 associate-iam-instance-profile --instance-id $INSTANCE_ID --iam-instance-profile Name=devops-instance-profile-group --region us-east-1
+Use code with caution.
+
+Infrastructure Validation Previews
+
+
+Administrative Verification (Run on aws-client)
+
+bash
+# Verify S3 Public Access Block status
+aws s3api get-public-access-block --bucket devops-s3-139373540961 --region us-east-1 
+
+# Verify Policy Attachment to the Role
+aws iam list-attached-role-policies --role-name devops-role --query 'AttachedPolicies[*].PolicyName' --output text
+
+# Verify the Instance Profile configuration on the instance
+aws ec2 describe-instances --filters "Name=tag:Name,Values=devops-ec2" --query "Reservations[*].Instances[*].IamInstanceProfile.Arn" --output text --region us-east-1
+Use code with caution.
+
+Terminal Execution Preview:
+
+json
+{
+    "PublicAccessBlockConfiguration": {
+        "BlockPublicAcls": true,
+        "IgnorePublicAcls": true,
+        "BlockPublicPolicy": true,
+        "RestrictPublicBuckets": true
+    }
+}
+devops-s3-policy
+arn:aws:iam::139373540961:instance-profile/devops-instance-profile-group
+Use code with caution.
+
+Application Functional Verification (Run inside devops-ec2)
+
+bash
+# Connect using the established SSH credentials trust path
+export INSTANCE_IP=$(aws ec2 describe-instances --filters "Name=tag:Name,Values=devops-ec2" --query "Reservations[*].Instances[*].PublicIpAddress" --output text --region us-east-1)
+ssh root@$INSTANCE_IP
+
+# Run the upload interaction tasks within the guest workspace
+echo "Verifying deployment status from inside the EC2 instance" > lab_validation.txt 
+aws s3 cp lab_validation.txt s3://devops-s3-139373540961/
+aws s3 ls s3://devops-s3-139373540961/
+Use code with caution.
+
+Guest Execution Preview:
+
+text
+Welcome to Ubuntu 22.04.4 LTS (GNU/Linux 6.5.0-1022-aws x86_64)
+
+root@ip-172-31-1-43:~# aws s3 cp lab_validation.txt s3://devops-s3-139373540961/
+Completed 57 Bytes/57 Bytes (505 Bytes/s) upload: ./lab_validation.txt to s3://devops-s3-139373540961/lab_validation.txt
+root@ip-172-31-1-43:~# aws s3 ls s3://devops-s3-139373540961/
+2026-10-20 11:54:25         34 test.txt
+2026-10-20 11:58:09         57 lab_validation.t
