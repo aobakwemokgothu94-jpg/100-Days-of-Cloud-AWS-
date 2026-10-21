@@ -1,1 +1,110 @@
+AWS ECS Fargate Deployment: Nautilus Application
+This project documents the containerization and deployment of a web application onto Amazon Elastic Container Service (ECS) using the Fargate serverless launch type, managed via the AWS CLI in the us-east-1 region.
 
+Architecture Overview
+[ Dockerfile (/root/pyapp) ]
+           │
+           ▼ (Build & Tag)
+   [ Amazon ECR ] (nautilus-ecr)
+           │
+           ▼ (Task Definition)
+[ ECS Cluster ] (nautilus-cluster)
+           │
+           ▼ (Fargate Service & ENI)
+[ Public Internet ] ──(Port 80)──► [ Nginx Web App ]
+Deployment Steps & Commands
+1. Authenticate Docker to ECR and Create Repository
+Bash
+export AWS_DEFAULT_REGION=us-east-1
+
+# Authenticate Docker client with Amazon ECR
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 915322164324.dkr.ecr.us-east-1.amazonaws.com
+
+# Create a private ECR repository
+aws ecr create-repository --repository-name nautilus-ecr --region us-east-1
+2. Build, Tag, and Push the Docker Image
+Bash
+cd /root/pyapp
+
+# Build the container image from the local Dockerfile
+docker build -t nautilus-ecr .
+
+# Tag the image for your ECR registry
+docker tag nautilus-ecr:latest 915322164324.dkr.ecr.us-east-1.amazonaws.com/nautilus-ecr:latest
+
+# Push the image to ECR
+docker push 915322164324.dkr.ecr.us-east-1.amazonaws.com/nautilus-ecr:latest
+3. Create the ECS Cluster and Register the Task Definition
+Bash
+# Create an ECS cluster using Fargate
+aws ecs create-cluster --cluster-name nautilus-cluster --region us-east-1
+
+# Create the task definition JSON configuration
+cat << 'EOF' > task-def.json
+{
+  "family": "nautilus-taskdefinition",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::915322164324:role/ecsTaskExecutionRole",
+  "containerDefinitions": [
+    {
+      "name": "pyapp",
+      "image": "915322164324.dkr.ecr.us-east-1.amazonaws.com/nautilus-ecr:latest", 
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 80,
+          "hostPort": 80,
+          "protocol": "tcp"
+        }
+      ]
+    }
+  ]
+}
+EOF
+
+# Register the task definition with ECS
+aws ecs register-task-definition --cli-input-json file://task-def.json --region us-east-1
+4. Create and Run the ECS Fargate Service
+Bash
+# Fetch default subnet and security group IDs
+SUBNET_ID=$(aws ec2 describe-subnets --filters "Name=defaultForAz,Values=true" --query "Subnets[0].SubnetId" --output text --region us-east-1)
+SG_ID=$(aws ec2 describe-security-groups --filters "Name=group-name,Values=default" --query "SecurityGroups[0].GroupId" --output text --region us-east-1)
+
+# Create the ECS service to run the task on Fargate
+aws ecs create-service \
+  --cluster nautilus-cluster \
+  --service-name nautilus-service \
+  --task-definition nautilus-taskdefinition \
+  --desired-count 1 \
+  --launch-type FARGATE \
+  --network-configuration "awsvpcConfiguration={subnets=[$SUBNET_ID],securityGroups=[$SG_ID],assignPublicIp=ENABLED}" \
+  --region us-east-1
+5. Configure Network Access & Security Groups
+To allow public HTTP traffic access to the Fargate container task, authorize inbound traffic on port 80 for the associated security group:
+
+Bash
+aws ec2 authorize-security-group-ingress \
+  --group-id sg-0ed84da4510ad2a9d \
+  --protocol tcp \
+  --port 80 \
+  --cidr 0.0.0.0/0 \
+  --region us-east-1
+Verification
+Test connection to the running Fargate task's Public IP:
+
+Bash
+curl -I http://<TASK_PUBLIC_IP>
+Expected Output:
+
+HTTP
+HTTP/1.1 200 OK
+Server: nginx/1.31.7
+Date: Wed, 21 Oct 2026 06:21:51 GMT
+Content-Type: text/html
+Content-Length: 255
+Connection: keep-alive
