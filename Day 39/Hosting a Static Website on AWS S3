@@ -1,1 +1,81 @@
+S3 Static Website Hosting with Public Access
+A DevOps project configuring an AWS S3 bucket for public static website hosting using the AWS CLI, complete with IAM public access block configuration, static website properties, and public read bucket policies.
 
+Architecture Overview
+[ External User ] 
+       │
+       ▼ (HTTP GET)
+[ S3 Website Endpoint ] (us-east-1)
+       │
+       ▼
+[ S3 Bucket: devops-web-841761087 ]
+       ├── index.html (Default Root Object)
+       └── Public Read Bucket Policy (JSON)
+Task Requirements & Implementation Summary
+Bucket Creation: Created an S3 bucket named devops-web-841761087 in the us-east-1 region.
+
+Public Access Configuration: Disabled block public access settings (BlockPublicAcls, IgnorePublicAcls, BlockPublicPolicy, RestrictPublicBuckets) to allow public website endpoints and bucket policies.
+
+Static Website Hosting: Enabled website hosting with index.html as the index document.
+
+Bucket Policy: Applied a public-read JSON policy granting s3:GetObject permissions to all principals (*).
+
+Content Deployment: Uploaded index.html from /root/ to the S3 bucket.
+
+Verification: Validated endpoint accessibility returning HTTP 200 OK.
+
+Configuration Files
+Bucket Policy (policy.json)
+JSON
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "PublicReadGetObject",
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::devops-web-841761087/*"
+    }
+  ]
+}
+Automation Script
+Bash
+#!/bin/bash
+set -e
+
+BUCKET_NAME="devops-web-841761087"
+REGION="us-east-1"
+
+# 1. Create S3 Bucket
+aws s3api create-bucket --bucket "$BUCKET_NAME" --region "$REGION"
+
+# 2. Disable Block Public Access
+aws s3api put-public-access-block \
+    --bucket "$BUCKET_NAME" \
+    --public-access-block-configuration "BlockPublicAcls=false,IgnorePublicAcls=false,BlockPublicPolicy=false,RestrictPublicBuckets=false"
+
+# 3. Enable Static Website Hosting
+aws s3 website s3://"$BUCKET_NAME"/ \
+    --index-document index.html \
+    --error-document error.html
+
+# 4. Apply Public Read Bucket Policy
+aws s3api put-bucket-policy --bucket "$BUCKET_NAME" --policy file://policy.json
+
+# 5. Upload index.html
+aws s3 cp /root/index.html s3://"$BUCKET_NAME"/index.html
+
+# 6. Verify Access
+curl -I http://"$BUCKET_NAME".s3-website-"$REGION".amazonaws.com
+Verification Preview
+Plaintext
+HTTP/1.1 200 OK
+x-amz-id-2: x8Xd9a+KJMNyQwsLknOfUujcxK6/A2hTT75eJ/3qPCWXraCd1iHxktOV++TvchNGNzCKTtTRQNuU2hwk34n8GFqxHW0zDiXG
+x-amz-request-id: P2VC7M0M5949J2XK
+Server: AmazonS3
+Date: Thu, 22 Oct 2026 06:07:45 GMT
+Last-Modified: Thu, 22 Oct 2026 06:07:08 GMT
+ETag: "bddd508bfd1fab1d7eabc0ad6d8db1ea"
+Content-Length: 20
+Content-Type: text/html
