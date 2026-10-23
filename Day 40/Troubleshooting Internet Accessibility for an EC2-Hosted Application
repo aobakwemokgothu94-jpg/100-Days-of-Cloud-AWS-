@@ -1,1 +1,170 @@
+# Nautilus AWS Lab — Troubleshoot VPC Internet Connectivity
+
+## 1. Task Overview
+
+The Nautilus Development Team deployed a web application on an Amazon EC2 instance running Nginx inside the `nautilus-vpc` VPC. Although the security group allowed inbound HTTP traffic on port 80, the application was initially inaccessible from the internet.
+
+The task was to investigate the VPC configuration, restore internet connectivity, and verify that the application was accessible over HTTP.
+
+## 2. Objectives
+
+- Inspect the `nautilus-vpc` VPC configuration.
+- Identify and repair the Internet Gateway routing issue.
+- Ensure the public subnet has an active default route to the Internet Gateway.
+- Verify inbound TCP port 80 in the EC2 security group.
+- Confirm that the Nginx application responds to external HTTP requests.
+
+## 3. AWS Resources
+
+| Resource | Value |
+|---|---|
+| AWS Region | `us-east-1` |
+| VPC | `vpc-0b6d233a97a6071c1` |
+| EC2 instance | `i-058c1d3043865cf77` |
+| Internet Gateway | `igw-0c3c9283f6fa6227c` |
+| Route table | `rtb-0a3423b5a6d7e4fed` |
+| Subnet | `subnet-06704ae1668ef2761` |
+| Security group | `sg-039b938cdc281a0f0` |
+| Public IPv4 | `44.222.201.167` |
+
+## 4. Initial Diagnosis
+
+The route table contained a default route to an Internet Gateway, but the route state was `blackhole`. The VPC had no Internet Gateway attached when it was first inspected.
+
+The EC2 instance already had a public IPv4 address, and its security group permitted inbound TCP port 80. The VPC's Internet Gateway and route configuration were therefore the primary issue identified during troubleshooting.
+
+### Initial route table preview
+
+```text
+Destination    Gateway                       State
+10.0.0.0/16    local                         active
+0.0.0.0/0      igw-0c3c9283f6fa6227c         blackhole
+```
+
+## 5. Resolution
+
+The existing Internet Gateway was reused, and the default route was repaired.
+
+The following commands show the essential route repair:
+
+```bash
+export AWS_DEFAULT_REGION=us-east-1
+
+VPC_ID="vpc-0b6d233a97a6071c1"
+RTB_ID="rtb-0a3423b5a6d7e4fed"
+IGW_ID="igw-0c3c9283f6fa6227c"
+
+aws ec2 attach-internet-gateway \
+  --internet-gateway-id "$IGW_ID" \
+  --vpc-id "$VPC_ID"
+
+aws ec2 replace-route \
+  --route-table-id "$RTB_ID" \
+  --destination-cidr-block 0.0.0.0/0 \
+  --gateway-id "$IGW_ID"
+```
+
+**Note:** The Internet Gateway attachment command was part of the conditional repair procedure. If the gateway is already attached, AWS may return an error for a duplicate attachment. The route replacement command is the operation confirmed by the resulting active route. These commands document the repair; they do not need to be rerun on the already-fixed lab.
+
+## 6. Final Route Table Preview
+
+After the repair, the route table showed:
+
+```text
+Destination    Gateway                       State
+10.0.0.0/16    local                         active
+0.0.0.0/0      igw-0c3c9283f6fa6227c         active
+```
+
+The default route now points to the Internet Gateway and is in the `active` state.
+
+## 7. Security Group Verification
+
+The security group was checked with:
+
+```bash
+aws ec2 describe-security-groups \
+  --group-ids sg-039b938cdc281a0f0 \
+  --query 'SecurityGroups[0].IpPermissions' \
+  --output json
+```
+
+The returned inbound rule included:
+
+```json
+{
+  "IpProtocol": "tcp",
+  "FromPort": 80,
+  "ToPort": 80,
+  "IpRanges": [
+    {
+      "CidrIp": "0.0.0.0/0"
+    }
+  ]
+}
+```
+
+This confirms that inbound HTTP traffic on TCP port 80 was allowed from IPv4 addresses.
+
+## 8. Application Connectivity Test
+
+The web application was tested using:
+
+```bash
+curl -I --connect-timeout 5 http://44.222.201.167
+```
+
+### Actual terminal output
+
+```text
+HTTP/1.1 200 OK
+Server: nginx/1.24.0
+Date: Fri, 23 Oct 2026 06:59:49 GMT
+Content-Type: text/html
+Content-Length: 615
+Last-Modified: Fri, 13 Oct 2023 13:33:26 GMT
+Connection: keep-alive
+ETag: "65294726-267"
+Accept-Ranges: bytes
+```
+
+The HTTP `200 OK` response confirms that the Nginx web server responded successfully to the HTTP request.
+
+## 9. Final Validation Summary
+
+| Check | Result |
+|---|---|
+| VPC identified | Passed |
+| EC2 instance identified | Passed |
+| Internet Gateway route repaired | Passed |
+| Default route state | `active` |
+| Inbound TCP port 80 | Allowed |
+| Nginx HTTP response | `200 OK` |
+| Application connectivity test | Successful |
+
+## 10. Conclusion
+
+The connectivity issue was traced to the VPC's Internet Gateway routing configuration. The Internet Gateway route was restored to an active state, the security group was verified to permit HTTP traffic on port 80, and the Nginx server returned an HTTP `200 OK` response.
+
+This task demonstrates practical AWS troubleshooting skills involving VPCs, Internet Gateways, route tables, security groups, EC2 public IP addressing, and HTTP connectivity validation.
+
+**Final outcome:** The web application responded successfully over HTTP at `http://44.222.201.167`.
+
+VPC networking
+
+Default route restored from blackhole to active.
+
+
+
+
+Security group
+
+Inbound TCP port 80 allowed from 0.0.0.0/0.
+
+
+
+
+Nginx application
+
+HTTP response: 200 OK.
 
