@@ -1,1 +1,189 @@
+# AWS KMS Encryption and Decryption
 
+## Task Overview
+
+This task demonstrates how to use **AWS Key Management Service (KMS)** to encrypt and decrypt a sensitive text file using a symmetric encryption key. The final step verifies that the decrypted file matches the original file.
+
+### Objectives
+
+- Create and verify a symmetric AWS KMS key.
+- Encrypt a sensitive text file.
+- Save the ciphertext to a binary file.
+- Decrypt the ciphertext into a plaintext file.
+- Compare the original and decrypted files to verify data integrity.
+
+## Environment and Configuration
+
+| Setting | Value |
+|---|---|
+| AWS Region | `us-east-1` |
+| KMS Key Alias | `alias/xfusion-KMS-Key` |
+| Key Specification | `SYMMETRIC_DEFAULT` |
+| Key Usage | `ENCRYPT_DECRYPT` |
+| Original File | `/root/SensitiveData.txt` |
+| Encrypted File | `/root/EncryptedData.bin` |
+| Decrypted File | `/root/DecryptedData.txt` |
+
+## 1. Verify the AWS Identity
+
+The AWS CLI was used to confirm the identity associated with the lab environment.
+
+```bash
+aws sts get-caller-identity --region us-east-1
+```
+
+### Preview: Terminal Output
+
+```json
+{
+    "UserId": "AIDAT75WNKMPOXT2M3NBG",
+    "Account": "274723590942",
+    "Arn": "arn:aws:iam::274723590942:user/kk_labs_user_756331"
+}
+```
+
+## 2. Create and Verify the KMS Key
+
+A symmetric encryption key was created in the `us-east-1` region, with the alias `alias/xfusion-KMS-Key`.
+
+```bash
+aws kms describe-key \
+  --region us-east-1 \
+  --key-id alias/xfusion-KMS-Key \
+  --query 'KeyMetadata.[KeySpec,KeyUsage,Enabled,KeyState]' \
+  --output table
+```
+
+### Preview: Key Configuration
+
+```text
+-----------------------
+|     DescribeKey     |
++---------------------+
+|  SYMMETRIC_DEFAULT  |
+|  ENCRYPT_DECRYPT    |
+|  True               |
+|  Enabled            |
++---------------------+
+```
+
+The output confirms that the key is enabled and configured for encryption and decryption.
+
+## 3. Verify the Original File
+
+The source file was confirmed to exist before encryption.
+
+```bash
+ls -lh /root/SensitiveData.txt
+```
+
+### Preview: Terminal Output
+
+```text
+-rw-r--r-- 1 root root 25 Oct 24 11:17 /root/SensitiveData.txt
+```
+
+The original file size was 25 bytes.
+
+## 4. Encrypt the Sensitive File
+
+The AWS KMS `encrypt` command encrypted the file using the configured key. The returned Base64-encoded ciphertext was decoded and saved to `/root/EncryptedData.bin`.
+
+```bash
+aws kms encrypt \
+  --region us-east-1 \
+  --key-id alias/xfusion-KMS-Key \
+  --plaintext fileb:///root/SensitiveData.txt \
+  --query CiphertextBlob \
+  --output text | base64 --decode > /root/EncryptedData.bin
+```
+
+Verify the encrypted file:
+
+```bash
+ls -lh /root/EncryptedData.bin
+```
+
+### Preview: Actual Terminal Output
+
+```text
+-rw-r--r-- 1 root root 177 Oct 24 11:25 /root/EncryptedData.bin
+```
+
+The encrypted file was successfully created and measured 177 bytes.
+
+## 5. Decrypt the Encrypted File
+
+The `decrypt` command recovered the original plaintext from the ciphertext and saved it to `/root/DecryptedData.txt`.
+
+```bash
+aws kms decrypt \
+  --region us-east-1 \
+  --key-id alias/xfusion-KMS-Key \
+  --ciphertext-blob fileb:///root/EncryptedData.bin \
+  --query Plaintext \
+  --output text | base64 --decode > /root/DecryptedData.txt
+```
+
+The decryption command completed without displaying an error in the provided terminal output.
+
+## 6. Verify Data Integrity
+
+The `cmp` command compared the original file with the decrypted file byte by byte.
+
+```bash
+cmp /root/SensitiveData.txt /root/DecryptedData.txt \
+  && echo "SUCCESS: Decrypted data matches the original."
+```
+
+### Preview: Actual Verification Output
+
+```text
+SUCCESS: Decrypted data matches the original.
+```
+
+**Result:** The comparison succeeded. The original and decrypted files contain identical bytes.
+
+## 7. Final Results
+
+| Requirement | Result |
+|---|---|
+| AWS identity verified | Completed |
+| Symmetric KMS key configured | Completed |
+| Original file verified | Completed |
+| Encrypted binary file created | Completed |
+| Decryption command executed | Completed |
+| Original and decrypted files compared | Passed |
+
+## Conclusion
+
+The AWS KMS encryption and decryption workflow was successfully executed. A symmetric KMS key was configured, the sensitive text file was encrypted, and the ciphertext was decrypted into a separate file. The final `cmp` command confirmed that the decrypted file matches the original byte for byte.
+
+**Final status:** Encryption, decryption, and data-integrity verification passed.
+
+## Evidence for Submission
+
+Recommended terminal screenshots:
+
+1. KMS key configuration showing `SYMMETRIC_DEFAULT`, `ENCRYPT_DECRYPT`, `True`, and `Enabled`.
+2. The encrypted file listing showing `/root/EncryptedData.bin` at 177 bytes.
+3. The final integrity check displaying `SUCCESS: Decrypted data matches the original.`
+
+These screenshots should be captured from the actual lab terminal before submission.
+Preview checklist
+Use these three terminal outputs as your main evidence:
+Preview 1 — KMS key
+
+Shows the symmetric key is enabled for encryption and decryption.
+
+
+
+Preview 2 — Encrypted file
+
+Shows /root/EncryptedData.bin exists and is 177 bytes.
+
+
+
+Preview 3 — Integrity verification
+
+Your strongest evidence: the comparison returned the success message.
