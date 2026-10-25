@@ -1,1 +1,264 @@
+# Nautilus DevOps — Create and Populate a DynamoDB To-Do Tasks Table
+
+## Task Overview
+
+- **Cloud Provider:** AWS
+- **Service:** Amazon DynamoDB
+- **Table Name:** `nautilus-tasks`
+- **AWS Region:** `us-east-1`
+- **Primary Key:** `taskId` (String)
+- **Billing Mode:** On-demand (`PAY_PER_REQUEST`)
+- **Result:** Successfully created and verified
+
+## Objective
+
+Create a DynamoDB table named `nautilus-tasks` to store To-Do application tasks. Each task is identified by a unique string `taskId` and contains a description and a status.
+
+The required records are:
+
+| Task ID | Description | Status |
+|---|---|---|
+| `1` | Learn DynamoDB | `completed` |
+| `2` | Build To-Do App | `in-progress` |
+
+## 1. Verify the AWS Region
+
+The AWS CLI region was checked before creating the DynamoDB resource.
+
+### Command
+
+```bash
+aws configure get region
+```
+
+### Terminal Preview
+
+```text
+us-east-1
+```
+
+All DynamoDB commands explicitly specified `--region us-east-1`.
+
+## 2. Create the DynamoDB Table
+
+The table was created with `taskId` as its string partition key and on-demand billing.
+
+### Command
+
+```bash
+aws dynamodb create-table \
+  --table-name nautilus-tasks \
+  --attribute-definitions AttributeName=taskId,AttributeType=S \
+  --key-schema AttributeName=taskId,KeyType=HASH \
+  --billing-mode PAY_PER_REQUEST \
+  --region us-east-1
+```
+
+### Terminal Preview
+
+The actual command returned a table description containing:
+
+```json
+{
+  "TableName": "nautilus-tasks",
+  "KeySchema": [
+    {
+      "AttributeName": "taskId",
+      "KeyType": "HASH"
+    }
+  ],
+  "TableStatus": "CREATING",
+  "BillingModeSummary": {
+    "BillingMode": "PAY_PER_REQUEST"
+  }
+}
+```
+
+The table was initially in the `CREATING` state.
+
+## 3. Wait for Table Availability
+
+The AWS CLI waiter was used to wait until the table became available.
+
+### Command
+
+```bash
+aws dynamodb wait table-exists \
+  --table-name nautilus-tasks \
+  --region us-east-1
+```
+
+The command completed without an error.
+
+### Verify the Table
+
+```bash
+aws dynamodb describe-table \
+  --table-name nautilus-tasks \
+  --region us-east-1 \
+  --query 'Table.{Name:TableName,Status:TableStatus,KeySchema:KeySchema}'
+```
+
+### Actual Terminal Output
+
+```json
+{
+  "Name": "nautilus-tasks",
+  "Status": "ACTIVE",
+  "KeySchema": [
+    {
+      "AttributeName": "taskId",
+      "KeyType": "HASH"
+    }
+  ]
+}
+```
+
+**Result:** The table is active, and the primary key is correctly configured as `taskId`.
+
+## 4. Insert Task 1
+
+Task 1 is titled `Learn DynamoDB` and has a status of `completed`.
+
+### Command
+
+```bash
+aws dynamodb put-item \
+  --table-name nautilus-tasks \
+  --item '{
+    "taskId": {"S": "1"},
+    "description": {"S": "Learn DynamoDB"},
+    "status": {"S": "completed"}
+  }' \
+  --region us-east-1
+```
+
+### Terminal Preview
+
+The command completed without an error. The AWS CLI did not return an item body because `put-item` was run without a return-values option.
+
+The inserted attributes were:
+
+```json
+{
+  "taskId": {"S": "1"},
+  "description": {"S": "Learn DynamoDB"},
+  "status": {"S": "completed"}
+}
+```
+
+## 5. Insert Task 2
+
+Task 2 is titled `Build To-Do App` and has a status of `in-progress`.
+
+### Command
+
+```bash
+aws dynamodb put-item \
+  --table-name nautilus-tasks \
+  --item '{
+    "taskId": {"S": "2"},
+    "description": {"S": "Build To-Do App"},
+    "status": {"S": "in-progress"}
+  }' \
+  --region us-east-1
+```
+
+### Terminal Preview
+
+The command completed without an error.
+
+The inserted attributes were:
+
+```json
+{
+  "taskId": {"S": "2"},
+  "description": {"S": "Build To-Do App"},
+  "status": {"S": "in-progress"}
+}
+```
+
+## 6. Scan the Table to Verify Both Tasks
+
+After inserting both records, a scan was performed to retrieve the stored items.
+
+### Command
+
+```bash
+aws dynamodb scan \
+  --table-name nautilus-tasks \
+  --region us-east-1 \
+  --output json
+```
+
+### Actual Terminal Output
+
+```json
+{
+  "Items": [
+    {
+      "description": {
+        "S": "Build To-Do App"
+      },
+      "taskId": {
+        "S": "2"
+      },
+      "status": {
+        "S": "in-progress"
+      }
+    },
+    {
+      "taskId": {
+        "S": "1"
+      },
+      "description": {
+        "S": "Learn DynamoDB"
+      },
+      "status": {
+        "S": "completed"
+      }
+    }
+  ],
+  "Count": 2,
+  "ScannedCount": 2,
+  "ConsumedCapacity": null
+}
+```
+
+**Verification results:**
+
+- Two records were returned.
+- Task `1` has the description `Learn DynamoDB` and status `completed`.
+- Task `2` has the description `Build To-Do App` and status `in-progress`.
+
+DynamoDB scan results are not guaranteed to appear in a particular order.
+
+## 7. Final Results
+
+| Requirement | Result |
+|---|---|
+| Create `nautilus-tasks` | Successful |
+| Use AWS region `us-east-1` | Confirmed in commands |
+| Configure `taskId` as a string partition key | Successful |
+| Wait for the table to become active | Successful |
+| Insert Task 1 | Successful |
+| Insert Task 2 | Successful |
+| Verify Task 1 status | `completed` |
+| Verify Task 2 status | `in-progress` |
+| Confirm the total number of items | 2 |
+
+## 8. Evidence and Screenshots
+
+For a lab submission, capture these terminal screenshots:
+
+1. **Table creation:** The `create-table` response showing `nautilus-tasks` and the `taskId` key schema.
+2. **Table activation:** The `describe-table` output showing `Status: ACTIVE`.
+3. **Task insertion:** Both successful `put-item` commands.
+4. **Final verification:** The `scan` output showing both records and `"Count": 2`.
+
+## Conclusion
+
+The Nautilus DevOps DynamoDB task was completed successfully. The `nautilus-tasks` table was created in the `us-east-1` region with `taskId` configured as a string partition key. Both requested task records were inserted, and the subsequent scan returned two records with the correct descriptions and statuses.
+
+The terminal evidence confirms the table creation, activation, insertion commands, and stored data. Final acceptance should be confirmed in the Nautilus DevOps lab portal.
 
