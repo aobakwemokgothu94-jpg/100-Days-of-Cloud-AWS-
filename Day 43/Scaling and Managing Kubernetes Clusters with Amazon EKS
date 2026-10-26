@@ -1,1 +1,213 @@
+# AWS EKS Cluster Creation — `nautilus-eks`
 
+## 1. Project Overview
+
+This task involved creating an Amazon Elastic Kubernetes Service (Amazon EKS) cluster using the AWS CLI. The cluster was configured with Kubernetes version `1.37`, the default VPC, and private-only API endpoint access.
+
+The cluster was successfully created and verified as `ACTIVE`.
+
+## 2. Task Objectives
+
+- Create an EKS cluster named `nautilus-eks`.
+- Use Kubernetes version `1.37`.
+- Configure the cluster in AWS region `us-east-1`.
+- Use the default VPC and subnets across three Availability Zones.
+- Associate the IAM role `eksClusterRole`.
+- Disable public API endpoint access and enable private endpoint access.
+- Verify that the cluster reaches the `ACTIVE` status.
+
+## 3. AWS Environment
+
+| Setting | Value |
+|---|---|
+| AWS service | Amazon EKS |
+| Cluster name | `nautilus-eks` |
+| Region | `us-east-1` |
+| Kubernetes version | `1.37` |
+| VPC | `vpc-020406f42e544776f` |
+| IAM role | `eksClusterRole` |
+| Public endpoint access | Disabled |
+| Private endpoint access | Enabled |
+| Final cluster status | `ACTIVE` |
+
+## 4. Configuration Details
+
+### IAM role
+
+The cluster uses the following IAM role:
+
+```text
+arn:aws:iam::769337942107:role/eksClusterRole
+```
+
+The role was created with an EKS trust relationship and the `AmazonEKSClusterPolicy` attached.
+
+### VPC and subnets
+
+The cluster uses the default VPC and the following subnets:
+
+| Availability Zone | Subnet ID |
+|---|---|
+| `us-east-1a` | `subnet-01ad0bd4ae2d5290d` |
+| `us-east-1b` | `subnet-0558022285f945dfb` |
+| `us-east-1c` | `subnet-07c9d36937ac53c6f` |
+
+### Endpoint configuration
+
+The cluster was configured with:
+
+```text
+Public endpoint access:  false
+Private endpoint access: true
+```
+
+This configuration prevents access to the Kubernetes API through its public endpoint. Access to the private endpoint requires connectivity to the cluster's VPC network.
+
+## 5. Cluster Creation
+
+The cluster configuration was saved in `/tmp/eks-create.json`. The following AWS CLI command was used to create the cluster:
+
+```bash
+aws eks create-cluster \
+  --cli-input-json file:///tmp/eks-create.json \
+  --region us-east-1
+```
+
+The command returned the cluster details with the initial status:
+
+```json
+{
+  "cluster": {
+    "name": "nautilus-eks",
+    "version": "1.37",
+    "status": "CREATING"
+  }
+}
+```
+
+The cluster initially entered the `CREATING` state while AWS provisioned the control plane.
+
+## 6. Wait for the Cluster to Become Active
+
+The following command waited for the cluster to become active:
+
+```bash
+aws eks wait cluster-active \
+  --name nautilus-eks \
+  --region us-east-1
+```
+
+After provisioning completed, the cluster was verified using:
+
+```bash
+aws eks describe-cluster \
+  --name nautilus-eks \
+  --region us-east-1 \
+  --query 'cluster.{Status:status,Reason:health.issues}' \
+  --output json
+```
+
+### Actual verification output
+
+```json
+{
+    "Status": "ACTIVE",
+    "Reason": null
+}
+```
+
+The output confirms that the cluster reached the `ACTIVE` state and that no health issues were reported in the returned result.
+
+## 7. Final Verification Command
+
+The final configuration was checked using:
+
+```bash
+aws eks describe-cluster \
+  --name nautilus-eks \
+  --region us-east-1 \
+  --query 'cluster.{Name:name,Status:status,Version:version,Endpoint:resourcesVpcConfig.endpointPublicAccess,PrivateAccess:resourcesVpcConfig.endpointPrivateAccess}' \
+  --output table
+```
+
+### Actual terminal output
+
+```text
+-----------------------------------
+|         DescribeCluster         |
++----------------+----------------+
+|  Endpoint      |  False         |
+|  Name          |  nautilus-eks  |
+|  PrivateAccess |  True           |
+|  Status        |  ACTIVE        |
+|  Version       |  1.37          |
++----------------+----------------+
+```
+
+## 8. Previews and Evidence
+
+### Preview 1 — EKS Cluster Creation
+
+**Expected screenshot:** The terminal showing the `aws eks create-cluster` command and the initial cluster response.
+
+Evidence to capture:
+- Cluster name: `nautilus-eks`
+- Kubernetes version: `1.37`
+- Initial status: `CREATING`
+- IAM role and VPC configuration
+
+### Preview 2 — Cluster Health Verification
+
+**Expected screenshot:** The terminal showing the health verification command and its result.
+
+Evidence:
+
+```json
+{
+    "Status": "ACTIVE",
+    "Reason": null
+}
+```
+
+This demonstrates that the EKS control plane became active.
+
+### Preview 3 — Final Cluster Configuration
+
+**Expected screenshot:** The terminal showing the final `describe-cluster` table.
+
+The output confirms:
+- The correct cluster name.
+- The cluster status is `ACTIVE`.
+- Kubernetes version `1.37`.
+- Public endpoint access is disabled.
+- Private endpoint access is enabled.
+
+**Note:** These preview sections describe which terminal screenshots to capture. The actual screenshots should be inserted into the README if image evidence is required by the lab.
+
+## 9. Results
+
+The EKS cluster creation and verification steps completed successfully.
+
+The final checks confirmed that:
+- The cluster exists and is active.
+- The selected Kubernetes version is `1.37`.
+- The cluster uses the intended VPC subnets.
+- Public API endpoint access is disabled.
+- Private API endpoint access is enabled.
+- No health issues were reported by the verification command.
+
+The returned configuration did not include an enabled EKS Auto Mode configuration. Worker-node provisioning and workload deployment were not verified as part of these results.
+
+## 10. Conclusion
+
+This task demonstrated how to provision an Amazon EKS cluster using the AWS CLI, configure its IAM role and networking settings, and verify the resulting cluster state.
+
+The final `describe-cluster` output confirms that `nautilus-eks` is `ACTIVE`, with private endpoint access enabled and public endpoint access disabled. The cluster creation objective was achieved.
+
+---
+
+**Task status:** Successfully created and verified.
+
+**Cluster:** `nautilus-eks`
+
+**Final status:** `ACTIVE`
