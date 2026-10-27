@@ -1,1 +1,209 @@
+# AWS Auto Scaling Group with Application Load Balancer and Nginx
 
+## 1. Project Overview
+
+This project demonstrates how to deploy a scalable web server infrastructure on Amazon Web Services (AWS) using an EC2 Launch Template, an Auto Scaling Group (ASG), an Application Load Balancer (ALB), and Nginx.
+
+The infrastructure was deployed in the **US East (N. Virginia) region (`us-east-1`)**. The Application Load Balancer distributes incoming HTTP traffic to an EC2 instance running Nginx. Auto Scaling is configured to maintain the required instance capacity and adjust capacity based on average CPU utilization.
+
+## 2. Objectives
+
+- Create an EC2 launch template using Amazon Linux 2023.
+- Configure Nginx to install and start automatically.
+- Create an Auto Scaling Group with minimum, desired, and maximum capacities.
+- Configure CPU target tracking at 50%.
+- Create an HTTP target group with health checks.
+- Configure an internet-facing Application Load Balancer on port 80.
+- Verify the Nginx welcome page through the load balancer DNS endpoint.
+
+## 3. AWS Resources Created
+
+| Resource | Configuration |
+|---|---|
+| AWS Region | `us-east-1` |
+| AMI | Amazon Linux 2023 |
+| Instance type | `t2.micro` |
+| Launch template | `datacenter-launch-template` |
+| Auto Scaling Group | `datacenter-asg` |
+| Minimum capacity | 1 instance |
+| Desired capacity | 1 instance |
+| Maximum capacity | 2 instances |
+| Scaling policy | Target tracking |
+| CPU utilization target | 50% |
+| Target group | `datacenter-tg` |
+| Load balancer | `datacenter-alb` |
+| Listener protocol | HTTP |
+| Listener port | 80 |
+| Web server | Nginx |
+| Target health | Healthy |
+| HTTP response | `200 OK` |
+
+## 4. Architecture
+
+```text
+                     Internet / Web Browser
+                              |
+                              | HTTP :80
+                              v
+                  Application Load Balancer
+                       datacenter-alb
+                              |
+                              v
+                       Target Group
+                       datacenter-tg
+                              |
+                              v
+                    Auto Scaling Group
+                      datacenter-asg
+                       Min: 1, Max: 2
+                              |
+                              v
+                       EC2 Instance
+                       Amazon Linux 2023
+                              |
+                              v
+                            Nginx
+                     Default Welcome Page
+```
+
+The load balancer receives HTTP requests and forwards them to healthy registered targets. The Auto Scaling Group maintains the configured capacity and uses the CPU target-tracking policy to adjust capacity according to demand.
+
+## 5. Launch Template Configuration
+
+The launch template `datacenter-launch-template` defines the EC2 instance configuration.
+
+- **AMI:** Amazon Linux 2023
+- **Instance type:** `t2.micro`
+- **Web server:** Nginx
+- **Inbound HTTP:** TCP port 80, permitted from the load balancer security group
+- **User data:** Installs, enables, and starts Nginx
+
+User-data script:
+
+```bash
+#!/bin/bash
+dnf install -y nginx
+systemctl enable --now nginx
+```
+
+This script installs Nginx and configures it to start automatically at boot.
+
+## 6. Auto Scaling Group Configuration
+
+The Auto Scaling Group is named `datacenter-asg`.
+
+| Setting | Value |
+|---|---:|
+| Minimum size | 1 |
+| Desired capacity | 1 |
+| Maximum size | 2 |
+| CPU target | 50% |
+| Health check type | ELB |
+
+The group is associated with the `datacenter-tg` target group. The target-tracking policy is named `datacenter-cpu-target-tracking`.
+
+The policy is configured to maintain average CPU utilization around 50%, adjusting the number of instances within the configured minimum and maximum limits as needed.
+
+## 7. Target Group and Load Balancer
+
+The target group `datacenter-tg` uses HTTP on port 80 and performs health checks to determine whether the registered EC2 instance can receive traffic.
+
+The internet-facing Application Load Balancer `datacenter-alb` has an HTTP listener on port 80 that forwards requests to the target group.
+
+**Load balancer URL:**
+
+http://datacenter-alb-1873907469.us-east-1.elb.amazonaws.com
+
+## 8. Verification and Output Preview
+
+### A. Load balancer status
+
+The AWS CLI reported the load balancer state as:
+
+```text
+State: active
+Scheme: internet-facing
+DNS: datacenter-alb-1873907469.us-east-1.elb.amazonaws.com
+```
+
+### B. Target health
+
+The target health check returned:
+
+```text
+Instance: i-08d99e55d4d333f51
+Port:     80
+State:    healthy
+```
+
+### C. HTTP response
+
+The command:
+
+```bash
+curl -I http://datacenter-alb-1873907469.us-east-1.elb.amazonaws.com/
+```
+
+returned:
+
+```text
+HTTP/1.1 200 OK
+Content-Type: text/html
+Server: nginx/1.30.6
+```
+
+This confirms that the load balancer endpoint responded successfully and that the Nginx server handled the request.
+
+### D. Nginx welcome page
+
+The command:
+
+```bash
+curl -s http://datacenter-alb-1873907469.us-east-1.elb.amazonaws.com/ | head -20
+```
+
+returned HTML containing:
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+</head>
+<body>
+<h1>Welcome to nginx!</h1>
+<p>If you see this page, nginx is successfully installed and working.</p>
+```
+
+**Verification result:** The default Nginx welcome page was successfully retrieved through the Application Load Balancer.
+
+## 9. Security Configuration
+
+The security groups were configured to allow HTTP traffic to the load balancer from the internet and HTTP traffic from the load balancer to the EC2 instance.
+
+- **Load balancer security group:** Allows inbound TCP port 80 from `0.0.0.0/0`.
+- **EC2 security group:** Allows inbound TCP port 80 from the load balancer security group.
+
+This configuration limits direct HTTP access to the instance through the configured security group rule.
+
+## 10. Skills Demonstrated
+
+- AWS EC2 launch templates
+- Amazon Linux 2023 instance configuration
+- Linux package management and system services
+- AWS Auto Scaling Groups
+- Target-tracking scaling policies
+- Application Load Balancers and listeners
+- Target group registration and health checks
+- AWS security groups
+- AWS CLI resource management
+- HTTP endpoint testing with `curl`
+- Troubleshooting load balancer provisioning and DNS resolution
+
+## 11. Conclusion
+
+The AWS web-server deployment was successfully configured and verified. The launch template, Auto Scaling Group, target group, CPU target-tracking policy, and Application Load Balancer were created. The load balancer reached the `active` state, the registered EC2 target became `healthy`, and HTTP requests returned `200 OK` with the default Nginx welcome page.
+
+These results demonstrate successful end-to-end HTTP connectivity through the load balancer to the Nginx web server. The configuration also establishes the foundation for scaling the web tier according to CPU utilization.
+
+**Final result: Deployment and connectivity checks passed.**
