@@ -1,1 +1,207 @@
+# AWS NAT Gateway Configuration — Nautilus / xFusionCorp Lab
+
+## 1. Project Overview
+
+This task demonstrates how to configure an AWS NAT Gateway to allow an EC2 instance in a private subnet to access the internet for outbound connections without assigning the instance a public IP address.
+
+The configuration uses a public subnet, an Internet Gateway, an Elastic IP address, a NAT Gateway, and separate public and private route tables. The final verification confirms that the test object `xfusion-test.txt` exists in the designated Amazon S3 bucket.
+
+## 2. Objectives
+
+- Use the existing VPC and private subnet.
+- Create a public subnet for the NAT Gateway.
+- Attach an Internet Gateway to the VPC.
+- Configure a public route table with an internet route.
+- Allocate an Elastic IP address.
+- Create and verify a NAT Gateway.
+- Configure a dedicated private route table.
+- Route private subnet internet traffic through the NAT Gateway.
+- Verify the S3 test-file upload.
+
+## 3. AWS Environment
+
+| Setting | Value |
+|---|---|
+| AWS Region | `us-east-1` |
+| VPC Name | `xfusion-priv-vpc` |
+| VPC ID | `vpc-0c8e19ff433750d41` |
+| VPC CIDR | `10.1.0.0/16` |
+| Private Subnet | `xfusion-priv-subnet` |
+| Private Subnet ID | `subnet-066d58eeb6b5bc1e7` |
+| Private Subnet CIDR | `10.1.1.0/24` |
+| Public Subnet | `xfusion-pub-subnet` |
+| Public Subnet ID | `subnet-0b53cae1a0176014e` |
+| Public Subnet CIDR | `10.1.2.0/24` |
+| EC2 Instance | `xfusion-priv-ec2` |
+| Internet Gateway | `igw-0ce1b00ad43d290aa` |
+| Public Route Table | `rtb-0842e3aaecccfbcd8` |
+| Private Route Table | `rtb-0ef1877c6f0808556` |
+| NAT Gateway | `nat-0d03d8ff6a8d201d9` |
+| Elastic IP Allocation | `eipalloc-04d498bf6ff19327a` |
+| S3 Bucket | `xfusion-nat-100072459` |
+
+## 4. Network Architecture
+
+```text
+                    Internet
+                       |
+                Internet Gateway
+                       |
+              Public Route Table
+                       |
+                Public Subnet
+                 10.1.2.0/24
+                       |
+                  NAT Gateway
+                  Elastic IP
+                       |
+              Private Route Table
+              0.0.0.0/0 -> NAT
+                       |
+                Private Subnet
+                 10.1.1.0/24
+                       |
+              Private EC2 Instance
+                xfusion-priv-ec2
+                       |
+             Outbound internet access
+                       |
+              Amazon S3 test upload
+```
+
+The private subnet routes outbound internet traffic through the NAT Gateway. The NAT Gateway resides in the public subnet and uses the Internet Gateway to reach the internet.
+
+## 5. Implementation Summary
+
+### Step 1: Inspect the existing VPC
+
+The existing VPC and private subnet were identified before creating additional networking resources.
+
+- VPC CIDR: `10.1.0.0/16`
+- Private subnet CIDR: `10.1.1.0/24`
+- Availability Zone: `us-east-1a`
+
+### Step 2: Create the public subnet
+
+A public subnet was created in the same VPC.
+
+- Name: `xfusion-pub-subnet`
+- CIDR: `10.1.2.0/24`
+- Availability Zone: `us-east-1a`
+
+Public IP mapping was enabled for the public subnet.
+
+### Step 3: Attach the Internet Gateway
+
+An Internet Gateway named `xfusion-igw` was created and attached to the VPC.
+
+### Step 4: Configure public routing
+
+A public route table named `xfusion-pub-rt` was created and associated with the public subnet.
+
+The default route was configured as:
+
+```text
+Destination: 0.0.0.0/0
+Target: Internet Gateway
+State: active
+```
+
+### Step 5: Allocate an Elastic IP and create the NAT Gateway
+
+An Elastic IP was allocated and associated with the NAT Gateway.
+
+- NAT Gateway name: `xfusion-natgw`
+- NAT Gateway ID: `nat-0d03d8ff6a8d201d9`
+
+The NAT Gateway reached the `available` state before the private route was configured.
+
+### Step 6: Configure private routing
+
+A dedicated private route table named `xfusion-priv-rt` was created and associated with the private subnet.
+
+The default route was configured as:
+
+```text
+Destination: 0.0.0.0/0
+Target: nat-0d03d8ff6a8d201d9
+State: active
+```
+
+The existing local VPC route remained in place. The main route table was not changed.
+
+### Step 7: Verify the S3 upload
+
+The following command was used to verify the test object:
+
+```bash
+aws s3 ls s3://xfusion-nat-100072459/ --region us-east-1
+```
+
+## 6. Verification Preview
+
+### S3 command output
+
+The following is the actual output observed after configuring the NAT Gateway:
+
+```text
+aws-client ~ ➜ aws s3 ls s3://xfusion-nat-100072459/ --region us-east-1
+
+2026-10-28 01:03:19          0 xfusion-test.txt
+```
+
+### Verification results
+
+| Check | Observed result |
+|---|---|
+| NAT Gateway | Reached `available` state |
+| Private route table | Dedicated table created |
+| Private subnet association | Confirmed |
+| Default route through NAT Gateway | `0.0.0.0/0` — `active` |
+| S3 bucket listing | Successful |
+| Test object | `xfusion-test.txt` found |
+| Test object size | `0 bytes` |
+
+The S3 listing confirms that the test object exists in the bucket. The zero-byte size is recorded as observed and is not presented as evidence of file contents.
+
+## 7. Evidence and Screenshots
+
+Add your own screenshots to this section if the lab submission requires visual evidence.
+
+Suggested screenshots:
+
+1. **Public subnet:** Show `xfusion-pub-subnet` and its CIDR.
+2. **Internet Gateway:** Show the Internet Gateway attached to the VPC.
+3. **NAT Gateway:** Show `xfusion-natgw` in the `Available` state.
+4. **Private route table:** Show the association with `xfusion-priv-subnet` and the active NAT default route.
+5. **S3 verification:** Show the terminal output containing `xfusion-test.txt`.
+
+Example Markdown for embedding screenshots saved in your repository:
+
+```markdown
+![NAT Gateway available](screenshots/nat-gateway.png)
+
+![Private route table](screenshots/private-route-table.png)
+
+![S3 upload verification](screenshots/s3-verification.png)
+```
+
+Replace these example image paths with the actual filenames of your screenshots. The examples are placeholders, not screenshots already captured.
+
+## 8. Key Learning Outcomes
+
+- A NAT Gateway enables instances in private subnets to initiate outbound internet connections.
+- A NAT Gateway must be placed in a public subnet with a working route to an Internet Gateway.
+- An Elastic IP provides a public IPv4 address for the NAT Gateway.
+- Private subnet routing must direct internet-bound traffic to the NAT Gateway.
+- Separate route tables allow public and private subnet traffic to be managed independently.
+- An S3 object listing provides evidence that the expected test object is present.
+
+## 9. Conclusion
+
+The AWS NAT Gateway networking configuration was completed, and the S3 verification command returned the expected test object, `xfusion-test.txt`, in bucket `xfusion-nat-100072459`.
+
+The observed routing configuration and successful S3 listing provide evidence supporting the intended private-subnet outbound connectivity workflow.
+
+**Final lab status:** Network configuration and S3 object verification completed. Confirm the final challenge status in the lab portal if a separate completion result is required.
 
