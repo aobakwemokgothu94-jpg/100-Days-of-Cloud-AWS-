@@ -1,1 +1,182 @@
+# AWS S3 File Copy Automation Using Lambda and DynamoDB
 
+## 1. Project Overview
+
+This project automates file transfers between two Amazon S3 buckets using AWS Lambda. When a file is uploaded to the public S3 bucket, an S3 event automatically triggers the Lambda function. The function copies the uploaded object to a private S3 bucket and records the transfer details in a DynamoDB table.
+
+The solution improves file-transfer automation, logging, and visibility into the movement of files between buckets.
+
+## 2. Objectives
+
+- Create a public S3 bucket for file uploads.
+- Create a private S3 bucket for secure storage.
+- Configure an AWS Lambda function to copy uploaded objects automatically.
+- Create an IAM execution role and attach the required permissions.
+- Store file-copy logs in DynamoDB.
+- Test the workflow using `sample.zip`.
+- Verify the copied object and corresponding database log.
+
+## 3. AWS Resources Created
+
+| Resource | Name | Configuration |
+|---|---|---|
+| Public S3 bucket | `nautilus-public-938836777` | Public object reads enabled |
+| Private S3 bucket | `nautilus-private-938836777` | Public access blocked |
+| Lambda function | `nautilus-copyfunction` | Python 3.12 |
+| IAM role | `lambda_execution_role` | Lambda execution role |
+| DynamoDB table | `nautilus-S3CopyLogs` | Partition key: `LogID` (String) |
+| Test object | `sample.zip` | Uploaded to public bucket |
+
+## 4. Architecture
+
+```text
+User uploads sample.zip
+          |
+          v
+Public S3 Bucket
+nautilus-public-938836777
+          |
+          | ObjectCreated event
+          v
+AWS Lambda
+nautilus-copyfunction
+          |
+          +----------------------+
+          |                      |
+          v                      v
+Private S3 Bucket          DynamoDB Table
+nautilus-private-          nautilus-S3CopyLogs
+938836777                   |
+          |                 +-- SourceBucket
+          |                 +-- DestinationBucket
+          v                 +-- ObjectKey
+      sample.zip            +-- Timestamp
+                            +-- Status
+```
+
+## 5. IAM Permissions
+
+The IAM role `lambda_execution_role` was created with a Lambda trust policy.
+
+The following managed policies were attached:
+
+- `AWSLambdaBasicExecutionRole` — basic CloudWatch logging permissions.
+- `NautilusS3CopyDynamoDBPolicy` — permissions to read objects from the public bucket, write objects to the private bucket, and write records to DynamoDB.
+
+The custom policy was successfully created and attached to the execution role.
+
+## 6. Lambda Configuration
+
+| Setting | Value |
+|---|---|
+| Function name | `nautilus-copyfunction` |
+| Runtime | Python 3.12 |
+| Handler | `lambda-function.lambda_handler` |
+| Memory | 128 MB |
+| Timeout | 10 seconds |
+| Region | `us-east-1` |
+
+The Lambda function uses Boto3 to interact with S3 and DynamoDB. It reads the source bucket and object key from the S3 event, copies the object to the private bucket, and writes a log entry with a unique `LogID`.
+
+## 7. DynamoDB Log Structure
+
+The DynamoDB table `nautilus-S3CopyLogs` uses `LogID` as its string partition key.
+
+Each successful transfer log includes:
+
+| Attribute | Purpose |
+|---|---|
+| `LogID` | Unique identifier for the log record |
+| `SourceBucket` | Name of the source S3 bucket |
+| `DestinationBucket` | Name of the destination S3 bucket |
+| `ObjectKey` | Name or key of the copied object |
+| `Timestamp` | Time the operation was logged |
+| `Status` | Transfer outcome |
+
+The function also attempts to record error details if a transfer fails.
+
+## 8. Test Procedure
+
+The test file was uploaded with:
+
+```bash
+aws s3 cp /root/sample.zip \
+  s3://nautilus-public-938836777/sample.zip \
+  --region us-east-1
+```
+
+The private bucket was checked using:
+
+```bash
+aws s3api head-object \
+  --bucket nautilus-private-938836777 \
+  --key sample.zip \
+  --region us-east-1
+```
+
+The DynamoDB records were inspected using:
+
+```bash
+aws dynamodb scan \
+  --table-name nautilus-S3CopyLogs \
+  --region us-east-1
+```
+
+## 9. Verified Results
+
+### Preview 1 — Lambda Function
+
+The function creation command succeeded with the following settings:
+
+```text
+FunctionName: nautilus-copyfunction
+Runtime: python3.12
+Timeout: 10
+MemorySize: 128
+State: Pending (during initial creation)
+```
+
+The function subsequently became active, as confirmed by the successful Lambda wait command.
+
+### Preview 2 — Private S3 Object
+
+The `head-object` command returned metadata for the copied object:
+
+```text
+Bucket: nautilus-private-938836777
+Key: sample.zip
+ContentLength: 164
+ContentType: application/zip
+ServerSideEncryption: AES256
+```
+
+This confirms that the object was present in the private bucket.
+
+### Preview 3 — DynamoDB Log
+
+The DynamoDB scan returned one record:
+
+```text
+LogID: 8a62ea5b-2f66-447e-aaad-4ab636137625
+SourceBucket: nautilus-public-938836777
+DestinationBucket: nautilus-private-938836777
+ObjectKey: sample.zip
+Timestamp: 2026-10-29 04:55:09
+Status: Success
+```
+
+The recorded status was `Success`, confirming that the function copied the file and wrote the transfer details to DynamoDB.
+
+## 10. Outcome
+
+The required AWS resources were created in `us-east-1`. The Lambda function was configured with the requested memory and timeout, the S3 upload trigger was configured, and `sample.zip` was successfully copied from the public bucket to the private bucket.
+
+The DynamoDB table contains a successful log entry identifying the source bucket, destination bucket, object key, timestamp, and transfer status.
+
+The terminal verification commands confirmed both the copied object and the corresponding log record.
+
+## 11. Conclusion
+
+This task demonstrates event-driven automation using Amazon S3, AWS Lambda, IAM, and DynamoDB. It shows how an upload event can trigger an automated file copy while maintaining a record of the operation for monitoring and auditing.
+
+**Final status:** File-copy and DynamoDB logging checks passed based on the recorded terminal output.
