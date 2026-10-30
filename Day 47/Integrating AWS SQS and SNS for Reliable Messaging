@@ -1,1 +1,175 @@
+# AWS Priority Queue Processing with SNS, SQS, Lambda and CloudFormation
+
+## Project Overview
+
+This project implements a priority-based message processing system using AWS CloudFormation, Amazon SNS, Amazon SQS and AWS Lambda.
+
+Messages are published to a central SNS topic with a priority attribute. SNS subscription filter policies route messages to the appropriate SQS queue. A Lambda function checks the high-priority queue first and processes messages from the low-priority queue only when no high-priority messages are available.
+
+## AWS Resources Created
+
+| Resource | Name / Configuration |
+|---|---|
+| CloudFormation Stack | `datacenter-priority-stack` |
+| SNS Topic | `datacenter-Priority-Queues-Topic` |
+| High-Priority SQS Queue | `datacenter-High-Priority-Queue` |
+| Low-Priority SQS Queue | `datacenter-Low-Priority-Queue` |
+| Lambda Function | `datacenter-priorities-queue-function` |
+| IAM Role | `lambda_execution_role` |
+| Lambda Runtime | Python 3.12 |
+| Memory | 128 MB |
+| Timeout | 10 seconds |
+| Region | us-east-1 |
+
+## Project Files
+
+- `datacenter-priority-stack.yml` — CloudFormation infrastructure template.
+- `index.py` — Lambda function source code.
+- `priority-lambda.zip` — Deployment package uploaded to Amazon S3.
+
+## Architecture and Workflow
+
+1. A message is published to the SNS topic.
+2. The message includes a `priority` attribute.
+3. SNS subscription filter policies identify whether the message is high or low priority.
+4. High-priority messages are delivered to the high-priority SQS queue.
+5. Low-priority messages are delivered to the low-priority SQS queue.
+6. Lambda polls the high-priority queue first.
+7. If the high-priority queue is empty, Lambda checks the low-priority queue.
+8. Successfully received messages are deleted from their respective queues.
+
+## Lambda Processing Logic
+
+The Lambda function uses the following environment variables:
+
+- `high_priority_queue`
+- `low_priority_queue`
+
+The function calls `poll_messages()` on the high-priority queue first. If no messages are available, it polls the low-priority queue.
+
+## Deployment
+
+The CloudFormation template was validated and deployed using:
+
+```bash
+aws cloudformation validate-template \
+  --template-body file:///root/datacenter-priority-stack.yml \
+  --region us-east-1
+```
+
+```bash
+aws cloudformation deploy \
+  --template-file /root/datacenter-priority-stack.yml \
+  --stack-name datacenter-priority-stack \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --region us-east-1
+```
+
+Deployment verification:
+
+```bash
+aws cloudformation describe-stacks \
+  --stack-name datacenter-priority-stack \
+  --region us-east-1 \
+  --query 'Stacks[0].StackStatus' \
+  --output text
+```
+
+**Observed output:**
+
+```text
+CREATE_COMPLETE
+```
+
+## Lambda Configuration Verification
+
+The Lambda configuration was checked using:
+
+```bash
+aws lambda get-function-configuration \
+  --function-name datacenter-priorities-queue-function \
+  --region us-east-1 \
+  --query '{State:State,Runtime:Runtime,Memory:MemorySize,Timeout:Timeout}' \
+  --output json
+```
+
+**Observed configuration:**
+
+```json
+{
+  "State": "Active",
+  "Runtime": "python3.12",
+  "Memory": 128,
+  "Timeout": 10
+}
+```
+
+## Test Messages
+
+Four messages were published to the SNS topic:
+
+| Message | Priority |
+|---|---|
+| High Priority message 1 | high |
+| High Priority message 2 | high |
+| Low Priority message 1 | low |
+| Low Priority message 2 | low |
+
+Each message was published with an SNS message attribute named `priority`.
+
+## Lambda Test Results
+
+The Lambda function was invoked four times using the AWS CLI.
+
+**Observed output:**
+
+```text
+===== INVOCATION 1 =====
+StatusCode: 200
+Message 'High Priority message 1' deleted
+
+===== INVOCATION 2 =====
+StatusCode: 200
+Message 'High Priority message 2' deleted
+
+===== INVOCATION 3 =====
+StatusCode: 200
+Message 'Low Priority message 2' deleted
+
+===== INVOCATION 4 =====
+StatusCode: 200
+Message 'Low Priority message 1' deleted
+```
+
+The test confirms that both high-priority messages were processed before the low-priority messages.
+
+## Queue Verification
+
+After processing, the approximate message counts were checked.
+
+**Observed output:**
+
+```text
+=== datacenter-High-Priority-Queue ===
+ApproximateNumberOfMessages: 0
+
+=== datacenter-Low-Priority-Queue ===
+ApproximateNumberOfMessages: 0
+```
+
+Both queues were empty after the four successful Lambda invocations.
+
+## Final Outcome
+
+The AWS priority queue infrastructure was successfully deployed using CloudFormation.
+
+The SNS topic routed messages to the correct SQS queues using priority-based subscription filters. The Lambda function successfully processed all four test messages, checking the high-priority queue before the low-priority queue.
+
+The test returned HTTP status code 200 for all four Lambda invocations, and both SQS queues had zero remaining messages.
+
+**Final CloudFormation Stack Status:** `CREATE_COMPLETE`
+
+**Final Lambda State:** `Active`
+
+**Test Result:** Successful.
 
