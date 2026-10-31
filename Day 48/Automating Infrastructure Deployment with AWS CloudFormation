@@ -1,1 +1,288 @@
+# AWS CloudFormation – Lambda Function Deployment
+
+## Project Overview
+
+This project demonstrates the deployment of an AWS Lambda function using an AWS CloudFormation template. The infrastructure was provisioned in the `us-east-1` region for the Nautilus DevOps team.
+
+CloudFormation was used to create and configure the Lambda function and its IAM execution role.
+
+## Project Objectives
+
+- Create a CloudFormation template named `xfusion-lambda.yml`.
+- Deploy a stack named `xfusion-lambda-app`.
+- Create an AWS Lambda function named `xfusion-lambda`.
+- Configure Python as the Lambda runtime.
+- Set memory allocation to 128 MB.
+- Configure the execution timeout to 10 seconds.
+- Create and attach an IAM role named `lambda_execution_role`.
+- Return HTTP status code 200 and the required response message.
+
+## Technologies Used
+
+| Technology | Purpose |
+|---|---|
+| AWS CloudFormation | Infrastructure provisioning |
+| AWS Lambda | Serverless function execution |
+| AWS IAM | Permissions and execution role |
+| AWS CLI | Deployment and verification |
+| Python 3.12 | Lambda runtime |
+| YAML | CloudFormation template definition |
+
+## Architecture
+
+The deployment consists of:
+
+1. CloudFormation stack: `xfusion-lambda-app`
+2. IAM execution role: `lambda_execution_role`
+3. Lambda function: `xfusion-lambda`
+4. Python handler: `index.lambda_handler`
+
+### Architecture Flow
+
+```text
+        AWS CLI
+           |
+           v
+    CloudFormation
+           |
+           v
+  xfusion-lambda-app
+           |
+       +---+---+
+       |       |
+       v       v
+     IAM     Lambda
+     Role    Function
+       |       |
+       |       v
+       |   Python Handler
+       |       |
+       +-------+
+               |
+               v
+       HTTP Status: 200
+               |
+               v
+  Welcome to KKE AWS Labs!
+```
+
+## CloudFormation Template
+
+**File:** `/root/xfusion-lambda.yml`
+
+```yaml
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Create xfusion Lambda function and execution role
+
+Resources:
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: lambda_execution_role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  XfusionLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: xfusion-lambda
+      Runtime: python3.12
+      Handler: index.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      MemorySize: 128
+      Timeout: 10
+      Code:
+        ZipFile: |
+          def lambda_handler(event, context):
+              return {
+                  'statusCode': 200,
+                  'body': 'Welcome to KKE AWS Labs!'
+              }
+```
+
+## Deployment Procedure
+
+### 1. Configure AWS region
+
+```bash
+aws configure set region us-east-1
+```
+
+### 2. Validate the CloudFormation template
+
+```bash
+aws cloudformation validate-template \
+  --template-body file:///root/xfusion-lambda.yml \
+  --region us-east-1
+```
+
+### 3. Create the CloudFormation stack
+
+```bash
+aws cloudformation create-stack \
+  --stack-name xfusion-lambda-app \
+  --template-body file:///root/xfusion-lambda.yml \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --region us-east-1
+```
+
+### 4. Wait for deployment
+
+```bash
+aws cloudformation wait stack-create-complete \
+  --stack-name xfusion-lambda-app \
+  --region us-east-1
+```
+
+### 5. Verify stack status
+
+```bash
+aws cloudformation describe-stacks \
+  --stack-name xfusion-lambda-app \
+  --region us-east-1 \
+  --query 'Stacks[0].StackStatus'
+```
+
+Expected result:
+
+```text
+"CREATE_COMPLETE"
+```
+
+## Verification and Testing
+
+### Lambda configuration
+
+```bash
+aws lambda get-function-configuration \
+  --function-name xfusion-lambda \
+  --region us-east-1
+```
+
+Verified configuration:
+
+```text
+FunctionName: xfusion-lambda
+Runtime: python3.12
+Role: lambda_execution_role
+Handler: index.lambda_handler
+Timeout: 10
+MemorySize: 128
+State: Active
+LastUpdateStatus: Successful
+```
+
+### Lambda invocation
+
+```bash
+aws lambda invoke \
+  --function-name xfusion-lambda \
+  --region us-east-1 \
+  /tmp/xfusion-response.json
+```
+
+### Actual invocation output
+
+```text
+{
+    "StatusCode": 200,
+    "ExecutedVersion": "$LATEST"
+}
+```
+
+### Actual Lambda response
+
+```json
+{
+  "statusCode": 200,
+  "body": "Welcome to KKE AWS Labs!"
+}
+```
+
+## Project Previews
+
+### Preview 1 – CloudFormation deployment
+
+```text
+Stack Name: xfusion-lambda-app
+
+Resource: LambdaExecutionRole
+Type: AWS::IAM::Role
+Status: CREATE_COMPLETE
+
+Resource: XfusionLambda
+Type: AWS::Lambda::Function
+Status: CREATE_COMPLETE
+
+Stack Status: CREATE_COMPLETE
+```
+
+### Preview 2 – Lambda configuration
+
+```text
+Function: xfusion-lambda
+Runtime: python3.12
+Memory: 128 MB
+Timeout: 10 seconds
+State: Active
+Region: us-east-1
+```
+
+### Preview 3 – Successful Lambda execution
+
+```text
+AWS Lambda Invocation
+---------------------
+StatusCode: 200
+
+Response:
+Welcome to KKE AWS Labs!
+
+Execution: Successful
+```
+
+## Final Deliverables
+
+| Deliverable | Result |
+|---|---|
+| CloudFormation YAML template | Created |
+| CloudFormation stack | Deployed |
+| Lambda function | Created |
+| IAM execution role | Created |
+| Python runtime | Configured |
+| Memory allocation | Verified |
+| Timeout configuration | Verified |
+| Lambda invocation | Successful |
+| Response body | Verified |
+| HTTP response status | 200 |
+
+## Conclusion
+
+The AWS CloudFormation Lambda deployment was successfully completed and verified.
+
+The `xfusion-lambda-app` stack reached `CREATE_COMPLETE`, and both the IAM execution role and Lambda function were successfully created.
+
+The Lambda function was invoked through the AWS CLI and returned the expected response:
+
+**Welcome to KKE AWS Labs!**
+
+This exercise demonstrates practical experience with infrastructure as code, AWS serverless computing, IAM role configuration, CloudFormation stack management, and command-line deployment verification.
+
+**Project Status: COMPLETED**
+
+**AWS Region:** `us-east-1`
+
+**Stack:** `xfusion-lambda-app`
+
+**Lambda:** `xfusion-lambda`
 
