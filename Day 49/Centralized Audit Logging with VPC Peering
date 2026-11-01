@@ -1,1 +1,355 @@
+# Cloud Infrastructure & Automated Log Aggregation Capstone Project
 
+## Project Overview
+
+This project implements a secure, automated log aggregation pipeline using Amazon Web Services (AWS).
+
+The solution transfers log files from a private EC2 instance to a public EC2 instance through VPC peering and SSH, then automatically uploads the received logs to an Amazon S3 bucket.
+
+The process is automated using Linux cron jobs, allowing log transfers and S3 uploads to run every minute without manual intervention.
+
+The project demonstrates practical knowledge of cloud networking, infrastructure deployment, access management, secure file transfers, object storage, encryption and automation.
+
+## Project Objectives
+
+- Create separate private and public AWS VPC environments.
+- Deploy EC2 instances in their respective subnets.
+- Establish connectivity between the VPCs using VPC peering.
+- Configure routing between private and public networks.
+- Transfer logs securely using SSH and SCP.
+- Configure an EC2 IAM instance role for AWS service access.
+- Store log files in a private Amazon S3 bucket.
+- Enable server-side encryption for stored logs.
+- Automate log transfers and S3 uploads using cron.
+
+## Architecture Preview
+
+```mermaid
+flowchart TD
+    A["Private VPC<br/>10.10.0.0/16"]
+    B["Private Subnet<br/>10.10.1.0/24"]
+    C["Private EC2<br/>10.10.1.151"]
+    D["/var/log/boots.log"]
+    E["VPC Peering Connection"]
+    F["Public VPC<br/>10.20.0.0/16"]
+    G["Public Subnet<br/>10.20.1.0/24"]
+    H["Public EC2<br/>10.20.1.98"]
+    I["Amazon S3 Bucket"]
+    
+    A --> B --> C --> D
+    D -->|"SSH / SCP every minute"| E
+    E --> F --> G --> H
+    H -->|"AWS CLI / IAM Role"| I
+```
+
+### Data Flow
+
+1. The private EC2 instance generates or maintains the source log file.
+2. A scheduled cron job transfers the log to the public EC2 instance using SCP.
+3. The public EC2 instance uses its attached IAM role to authenticate with AWS.
+4. Another scheduled cron job uploads the received log to Amazon S3.
+5. The S3 object is stored with AES256 server-side encryption.
+
+## AWS Infrastructure
+
+### Private Network
+
+| Resource | Configuration |
+|---|---|
+| VPC | devops-priv-vpc |
+| VPC CIDR | 10.10.0.0/16 |
+| Private subnet | devops-priv-subnet |
+| Subnet CIDR | 10.10.1.0/24 |
+| EC2 instance | devops-priv-ec2 |
+| Private IP | 10.10.1.151 |
+| Availability Zone | us-east-1a |
+
+### Public Network
+
+| Resource | Configuration |
+|---|---|
+| VPC | devops-pub-vpc |
+| VPC CIDR | 10.20.0.0/16 |
+| Public subnet | devops-pub-subnet |
+| Subnet CIDR | 10.20.1.0/24 |
+| EC2 instance | devops-pub-ec2 |
+| Private IP | 10.20.1.98 |
+| Public IP | 100.62.95.116 |
+| Availability Zone | us-east-1a |
+
+### Connectivity
+
+- VPC peering connection: `pcx-020d3a79408411efe`
+- Private-to-public route: `10.20.0.0/16`
+- Public-to-private route: `10.10.0.0/16`
+- Internet Gateway attached to the public VPC.
+- SSH connectivity verified between the EC2 instances.
+
+## S3 Storage Configuration
+
+| Property | Value |
+|---|---|
+| Bucket | devops-s3-logs-770304373 |
+| Region | us-east-1 |
+| Object key | devops-priv-vpc/boot/boots.log |
+| Encryption | AES256 |
+| Public access | Blocked |
+
+S3 destination:
+
+`s3://devops-s3-logs-770304373/devops-priv-vpc/boot/boots.log`
+
+All four S3 Block Public Access settings were enabled.
+
+## IAM Configuration
+
+An EC2 IAM role named `devops-s3-role` was created and attached to the public EC2 instance through the `devops-s3-instance-profile` instance profile.
+
+The role allows the EC2 instance to authenticate with AWS services without storing long-lived access keys on the server.
+
+The identity was verified using:
+
+```bash
+aws sts get-caller-identity
+```
+
+Verified identity:
+
+```text
+Account: 818788518694
+Arn: arn:aws:sts::818788518694:assumed-role/devops-s3-role/i-01c2490ba6155a53f
+```
+
+**Security note:** The role was attached successfully using the AmazonS3FullAccess managed policy because the lab IAM user could not create the requested inline policy. A production implementation should replace this broad permission with a bucket-scoped least-privilege policy.
+
+## Log Transfer Implementation
+
+### Source Log
+
+The private EC2 instance contains:
+
+```text
+/var/log/boots.log
+```
+
+Log contents:
+
+```text
+Hello from devops KKE!
+```
+
+### SSH and SCP Transfer
+
+A dedicated SSH key named `log-transfer` was generated on the private EC2 instance.
+
+The corresponding public key was authorized on the public EC2 instance.
+
+The private EC2 instance transfers the log using:
+
+```bash
+scp -i /home/ubuntu/.ssh/log-transfer \
+  -o BatchMode=yes \
+  -o StrictHostKeyChecking=yes \
+  /var/log/boots.log \
+  ubuntu@10.20.1.98:/home/ubuntu/boots.log
+```
+
+The transfer was verified on the public EC2 instance.
+
+## Automation with Cron
+
+Two cron jobs automate the pipeline.
+
+### 1. Private EC2 — Log Transfer
+
+```cron
+* * * * * /usr/bin/scp -i /home/ubuntu/.ssh/log-transfer -o BatchMode=yes -o StrictHostKeyChecking=yes /var/log/boots.log ubuntu@10.20.1.98:/home/ubuntu/boots.log >> /home/ubuntu/log-transfer.log 2>&1
+```
+
+This transfers the source log to the public EC2 every minute.
+
+### 2. Public EC2 — S3 Upload
+
+```cron
+* * * * * /usr/bin/aws s3 cp /home/ubuntu/boots.log s3://devops-s3-logs-770304373/devops-priv-vpc/boot/boots.log >> /home/ubuntu/s3-upload.log 2>&1
+```
+
+This uploads the received log to S3 every minute.
+
+The cron service was verified as active on the private EC2.
+
+## Project Previews and Verification Evidence
+
+### Preview 1 — Private-to-Public Log Transfer
+
+Verified destination file:
+
+```text
+-rw-r--r-- 1 ubuntu ubuntu 23 Nov 1 09:01 /home/ubuntu/boots.log
+
+Hello from devops KKE!
+```
+
+**Result:** Successful log transfer from the private EC2 to the public EC2.
+
+### Preview 2 — IAM Authentication
+
+Command:
+
+```bash
+aws sts get-caller-identity
+```
+
+Verified output:
+
+```json
+{
+  "UserId": "AROA35I4ZJMTFBNTWUMX5:i-01c2490ba6155a53f",
+  "Account": "818788518694",
+  "Arn": "arn:aws:sts::818788518694:assumed-role/devops-s3-role/i-01c2490ba6155a53f"
+}
+```
+
+**Result:** Successful IAM role authentication.
+
+### Preview 3 — S3 Upload
+
+Command:
+
+```bash
+aws s3 cp /home/ubuntu/boots.log \
+s3://devops-s3-logs-770304373/devops-priv-vpc/boot/boots.log
+```
+
+Verified output:
+
+```text
+upload: ./boots.log to s3://devops-s3-logs-770304373/devops-priv-vpc/boot/boots.log
+```
+
+**Result:** Successful S3 upload.
+
+### Preview 4 — S3 Object Verification
+
+Command:
+
+```bash
+aws s3api head-object \
+  --bucket devops-s3-logs-770304373 \
+  --key devops-priv-vpc/boot/boots.log
+```
+
+Verified output:
+
+```json
+{
+  "AcceptRanges": "bytes",
+  "ContentLength": 23,
+  "ETag": "\"609ca7172f9abe72823c9818438f8a4d\"",
+  "ContentType": "binary/octet-stream",
+  "ServerSideEncryption": "AES256"
+}
+```
+
+**Result:** S3 object exists, with a size of 23 bytes and AES256 encryption.
+
+### Preview 5 — Scheduled Automation
+
+Private EC2 cron configuration:
+
+```cron
+* * * * * /usr/bin/scp ...
+```
+
+Public EC2 cron configuration:
+
+```cron
+* * * * * /usr/bin/aws s3 cp ...
+```
+
+Verified cron service:
+
+```text
+active
+```
+
+Verified S3 upload log:
+
+```text
+upload: ./boots.log to s3://devops-s3-logs-770304373/devops-priv-vpc/boot/boots.log
+upload: ./boots.log to s3://devops-s3-logs-770304373/devops-priv-vpc/boot/boots.log
+```
+
+**Result:** Scheduled S3 uploads successfully executed.
+
+## Technologies and Services Used
+
+| Technology | Purpose |
+|---|---|
+| Amazon VPC | Network isolation |
+| EC2 | Compute infrastructure |
+| VPC Peering | Private network communication |
+| Internet Gateway | Public subnet connectivity |
+| Route Tables | Network traffic routing |
+| Security Groups | Instance-level network filtering |
+| SSH | Secure remote access |
+| SCP | Secure file transfer |
+| IAM | Identity and access management |
+| Amazon S3 | Log storage |
+| AWS CLI | AWS service management |
+| Linux Cron | Scheduled automation |
+| Ubuntu | Server operating system |
+
+## Security Considerations
+
+The project incorporates several security measures:
+
+- Separate private and public VPC environments.
+- SSH key-based authentication.
+- IAM role-based authentication instead of static AWS credentials.
+- S3 Block Public Access enabled.
+- AES256 server-side encryption.
+- Dedicated SSH key for log transfers.
+
+Further improvements for a production deployment:
+
+- Restrict SSH ingress to explicitly required source addresses.
+- Replace AmazonS3FullAccess with a least-privilege bucket policy.
+- Consider AWS Systems Manager Session Manager for administrative access.
+- Use centralized monitoring and alerting.
+- Introduce log rotation and retention policies.
+- Consider S3 versioning and lifecycle policies.
+- Add transfer failure notifications and retry handling.
+
+## Final Project Outcome
+
+The automated log aggregation pipeline was successfully implemented and verified.
+
+The private EC2 instance transfers its log file to the public EC2 instance through the established VPC peering connection. The public EC2 instance then uploads the received log to Amazon S3 using its attached IAM role.
+
+Both cron jobs were configured, S3 uploads were observed in the execution log, and the final S3 object was verified with AES256 server-side encryption.
+
+**Project status: Operational and verified based on the recorded test evidence.**
+
+## Skills Demonstrated
+
+- AWS cloud infrastructure deployment.
+- Public and private network architecture.
+- VPC peering and route configuration.
+- EC2 administration.
+- Linux system administration.
+- SSH key management.
+- Automated file transfer.
+- IAM role configuration.
+- S3 storage and encryption.
+- Cron-based automation.
+- Cloud security fundamentals.
+- Infrastructure troubleshooting and verification.
+
+---
+
+**Project Category:** Cloud Engineering / AWS Infrastructure / Automation
+
+**Project Type:** Capstone-style practical implementation
+
+**AWS Region:** us-east-1
