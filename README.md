@@ -42,3 +42,4 @@ To explore the scripts, templates, or playbooks in this repository:
    ```bash
    git clone [https://github.com/aobakwemokgothu94-jpg/100-Days-of-Cloud-AWS-.git](https://github.com/aobakwemokgothu94-jpg/100-Days-of-Cloud-AWS-.git)
    cd 100-Days-of-Cloud-AWS-
+<img width="2048" height="1456" alt="b2595192-d764-412d-aa83-a4a5ba0f8d3c" src="https://github.com/user-attachments/assets/05478b64-1b0a-4a11-b4c9-23153ef53306" />
