@@ -1,1 +1,304 @@
+# 100 Days of Cloud AWS — Final Task
+# AWS EC2 EBS Volume Expansion (8 GiB to 12 GiB)
 
+## Project Overview
+
+The Nautilus DevOps Team identified that its development EC2 instance, `devops-ec2`, was running out of storage space.
+
+The instance had an attached root EBS volume with an initial capacity of 8 GiB. The objective was to expand the volume to 12 GiB and ensure that the additional storage became available within the running Linux instance.
+
+The task involved identifying the attached EBS volume, modifying its capacity through the AWS CLI, connecting to the instance using SSH, expanding the root partition, and growing the XFS filesystem.
+
+**Result:** Successfully expanded the EBS volume, root partition, and root filesystem from 8 GiB to 12 GiB without rebooting the EC2 instance.
+
+## Project Objectives
+
+- Identify the EBS volume attached to `devops-ec2`.
+- Increase the EBS volume size from 8 GiB to 12 GiB.
+- Use AWS CLI to manage the storage modification.
+- Connect to the EC2 instance using SSH.
+- Expand the Linux root partition.
+- Extend the XFS filesystem.
+- Verify that the root filesystem recognizes the new capacity.
+
+## AWS Infrastructure Details
+
+| Configuration | Value |
+|---|---|
+| AWS Region | `us-east-1` |
+| EC2 Instance | `devops-ec2` |
+| Instance ID | `i-03aab5edeca62bd07` |
+| Instance State | Running |
+| Root Device | `/dev/xvda` |
+| EBS Volume ID | `vol-015bea10961b22b3f` |
+| Initial Volume Size | 8 GiB |
+| Final Volume Size | 12 GiB |
+| Root Partition | `/dev/xvda1` |
+| Filesystem | XFS |
+| Operating System | Amazon Linux 2023 |
+
+## 1. Identify the Attached EBS Volume
+
+The AWS CLI was used to locate the running EC2 instance and identify its root volume.
+
+```bash
+aws ec2 describe-instances \
+  --region us-east-1 \
+  --filters "Name=tag:Name,Values=devops-ec2" \
+  --query 'Reservations[].Instances[].{InstanceId:InstanceId,State:State.Name,RootDevice:RootDeviceName,Volumes:BlockDeviceMappings[].{Device:DeviceName,VolumeId:Ebs.VolumeId}}' \
+  --output table
+```
+
+### Preview — Identified EC2 Instance
+
+```text
+InstanceId: i-03aab5edeca62bd07
+State: running
+RootDevice: /dev/xvda
+
+Device: /dev/xvda
+VolumeId: vol-015bea10961b22b3f
+```
+
+The root EBS volume was successfully identified.
+
+## 2. Expand the EBS Volume
+
+The attached EBS volume was modified from 8 GiB to 12 GiB.
+
+```bash
+aws ec2 modify-volume \
+  --region us-east-1 \
+  --volume-id vol-015bea10961b22b3f \
+  --size 12
+```
+
+### Preview — Volume Modification
+
+```text
+VolumeId: vol-015bea10961b22b3f
+ModificationState: modifying
+OriginalSize: 8
+TargetSize: 12
+```
+
+The modification status was checked using:
+
+```bash
+aws ec2 describe-volumes-modifications \
+  --region us-east-1 \
+  --volume-ids vol-015bea10961b22b3f \
+  --query 'VolumesModifications[].{VolumeId:VolumeId,OriginalSize:OriginalSize,TargetSize:TargetSize,State:ModificationState}' \
+  --output table
+```
+
+Observed status:
+
+```text
+OriginalSize: 8
+TargetSize: 12
+State: optimizing
+```
+
+AWS confirmed that the volume modification had progressed successfully.
+
+## 3. Connect to the EC2 Instance Using SSH
+
+The public IP address was retrieved using:
+
+```bash
+aws ec2 describe-instances \
+  --region us-east-1 \
+  --instance-ids i-03aab5edeca62bd07 \
+  --query 'Reservations[0].Instances[0].PublicIpAddress' \
+  --output text
+```
+
+SSH key permissions were restricted:
+
+```bash
+chmod 400 /root/devops-keypair.pem
+```
+
+The connection was established using:
+
+```bash
+ssh -i /root/devops-keypair.pem ec2-user@52.91.15.110
+```
+
+The SSH connection was successful, providing access to the Amazon Linux 2023 instance.
+
+## 4. Inspect the Disk and Root Filesystem
+
+The initial disk layout was inspected using:
+
+```bash
+lsblk
+df -h /
+```
+
+### Preview — Before Partition Expansion
+
+```text
+NAME      SIZE TYPE MOUNTPOINTS
+xvda       12G disk
+├─xvda1     8G part /
+├─xvda127   1M part
+└─xvda128  10M part /boot/efi
+```
+
+Initial filesystem usage:
+
+```text
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/xvda1      8.0G  1.6G  6.5G  19% /
+```
+
+The EBS disk had expanded to 12 GiB, but the root partition and filesystem still reflected the original 8 GiB capacity.
+
+The filesystem type and availability of the partition expansion utility were checked:
+
+```bash
+df -T /
+which growpart
+```
+
+Observed output:
+
+```text
+Filesystem     Type
+/dev/xvda1     xfs
+
+/usr/bin/growpart
+```
+
+This confirmed that the root filesystem used XFS and that `growpart` was installed.
+
+## 5. Expand the Root Partition
+
+The root partition was expanded to use the available disk capacity.
+
+```bash
+sudo growpart /dev/xvda 1
+```
+
+### Preview — Successful Partition Expansion
+
+```text
+CHANGED: partition=1
+start=24576
+old: size=16752607 end=16777183
+new: size=25141215 end=25165791
+```
+
+The partition expansion completed successfully.
+
+## 6. Expand the XFS Filesystem
+
+The XFS filesystem was grown online using:
+
+```bash
+sudo xfs_growfs /
+```
+
+### Preview — Successful Filesystem Expansion
+
+```text
+data blocks changed from 2094075 to 3142651
+```
+
+The filesystem successfully expanded to use the additional partition capacity.
+
+The operation did not require unmounting the root filesystem or rebooting the instance.
+
+## 7. Final Verification
+
+The final disk layout and filesystem capacity were verified using:
+
+```bash
+lsblk
+df -h /
+```
+
+### Preview — Final Disk Layout
+
+```text
+NAME      SIZE TYPE MOUNTPOINTS
+xvda       12G disk
+├─xvda1    12G part /
+├─xvda127   1M part
+└─xvda128  10M part /boot/efi
+```
+
+### Preview — Final Root Filesystem
+
+```text
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/xvda1       12G  1.6G   11G  13% /
+```
+
+The final output confirms that the root partition and mounted root filesystem both recognize the expanded 12 GiB capacity.
+
+## Before and After Comparison
+
+| Component | Before | After |
+|---|---:|---:|
+| EBS Volume | 8 GiB | 12 GiB |
+| Root Partition | 8 GiB | 12 GiB |
+| Root Filesystem | 8 GiB | 12 GiB |
+| Available Space | 6.5 GiB | 11 GiB |
+| Disk Usage | 19% | 13% |
+
+## Key Commands Reference
+
+| Command | Purpose |
+|---|---|
+| `aws ec2 describe-instances` | Identify the EC2 instance and attached volume |
+| `aws ec2 modify-volume` | Expand the EBS volume |
+| `aws ec2 describe-volumes-modifications` | Verify volume modification status |
+| `ssh -i` | Connect to the EC2 instance |
+| `lsblk` | Inspect disk and partition layout |
+| `df -T /` | Identify the root filesystem type |
+| `growpart /dev/xvda 1` | Expand the root partition |
+| `xfs_growfs /` | Expand the mounted XFS filesystem |
+| `df -h /` | Verify filesystem capacity |
+
+## Skills Demonstrated
+
+- AWS EC2 administration
+- Amazon EBS volume management
+- AWS CLI operations
+- Linux system administration
+- SSH authentication
+- Disk and partition management
+- XFS filesystem administration
+- Online storage expansion
+- Infrastructure troubleshooting
+- Post-deployment verification
+
+## Final Results
+
+The storage expansion was successfully completed.
+
+The `devops-ec2` instance's EBS volume was increased from 8 GiB to 12 GiB. The root partition `/dev/xvda1` was expanded using `growpart`, and the XFS filesystem was extended using `xfs_growfs`.
+
+Final verification confirmed:
+
+- EBS disk capacity: 12 GiB.
+- Root partition capacity: 12 GiB.
+- Root filesystem capacity: 12 GiB.
+- Available filesystem space: approximately 11 GiB.
+- Instance remained running throughout the operation.
+- No reboot was required.
+
+## Conclusion
+
+This task demonstrates the practical administration of AWS storage infrastructure and the importance of ensuring that changes at the cloud storage layer are correctly reflected within the operating system.
+
+Expanding an EBS volume alone does not automatically increase the mounted filesystem. The partition and filesystem must also be extended and verified.
+
+This final exercise brought together AWS resource management, Linux storage administration, and infrastructure verification.
+
+**Task Status: SUCCESSFULLY COMPLETED**
+
+**Learning Milestone: 100 Days of Cloud AWS — Final Task**
